@@ -69,7 +69,8 @@ public class DownloadJobService {
             job.addLog("🔍 Đang lấy thông tin playlist...");
             sendSseEvent(jobId, "status", buildStatusEvent(job));
 
-            List<VideoInfo> videos = ytDlpService.getPlaylistInfo(job.getPlaylistUrl());
+            YtDlpService.PlaylistResult result = ytDlpService.getPlaylistInfo(job.getPlaylistUrl());
+            List<VideoInfo> videos = result.videos();
             if (videos.isEmpty()) {
                 job.setStatus(DownloadJob.JobStatus.FAILED);
                 job.addLog("❌ Không tìm thấy video nào trong playlist!");
@@ -78,10 +79,16 @@ public class DownloadJobService {
                 return;
             }
 
+            String playlistTitle = result.playlistTitle();
+            if (playlistTitle != null && !playlistTitle.isBlank()) {
+                job.addLog("📋 Playlist: " + playlistTitle);
+            }
+
             job.getVideos().addAll(videos);
             job.setTotalVideos(videos.size());
             job.addLog("✅ Tìm thấy " + videos.size() + " video");
-            sendSseEvent(jobId, "playlist_info", Map.of("videos", videos, "total", videos.size()));
+            sendSseEvent(jobId, "playlist_info", Map.of("videos", videos, "total", videos.size(), "playlistTitle", playlistTitle != null ? playlistTitle : ""));
+
 
             // 2. Tạo output directory
             String outputDir = Paths.get(job.getSavePath(), job.getFolderName()).toString();
@@ -120,9 +127,12 @@ public class DownloadJobService {
                     });
 
                     video.setProgress(100);
-                    video.setStatus(VideoInfo.VideoStatus.COMPLETED);
+                    // Nếu yt-dlp skip (file đã có sẵn) thì giữ status SKIPPED, ngược lại COMPLETED
+                    if (video.getStatus() != VideoInfo.VideoStatus.SKIPPED) {
+                        video.setStatus(VideoInfo.VideoStatus.COMPLETED);
+                        job.addLog("✅ Hoàn thành: " + video.getTitle());
+                    }
                     job.setCompletedVideos(job.getCompletedVideos() + 1);
-                    job.addLog("✅ Hoàn thành: " + video.getTitle());
 
                 } catch (Exception e) {
                     video.setStatus(VideoInfo.VideoStatus.FAILED);

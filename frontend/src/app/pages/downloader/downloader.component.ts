@@ -135,7 +135,13 @@ export class DownloaderComponent implements OnInit, OnDestroy, AfterViewChecked 
       next: (res) => {
         this.previewData = { total: res.total, videos: res.videos };
         this.state = 'idle';
-        this.message.success(`Tìm thấy ${res.total} video trong playlist`);
+
+        // Auto-fill tên folder từ tên playlist nếu chưa nhập
+        if (res.playlistTitle && !this.form.get('folderName')?.value) {
+          this.form.get('folderName')?.setValue(res.playlistTitle);
+        }
+
+        this.message.success(`Tìm thấy ${res.total} video · Playlist: "${res.playlistTitle || 'N/A'}"`);
       },
       error: (err) => {
         this.state = 'idle';

@@ -25,11 +25,12 @@ public class PlaylistController {
     public ResponseEntity<?> getPlaylistInfo(@RequestParam String url) {
         try {
             log.info("Fetching playlist info for: {}", url);
-            List<VideoInfo> videos = ytDlpService.getPlaylistInfo(url);
+            YtDlpService.PlaylistResult result = ytDlpService.getPlaylistInfo(url);
             return ResponseEntity.ok(Map.of(
                     "success", true,
-                    "total", videos.size(),
-                    "videos", videos
+                    "playlistTitle", result.playlistTitle(),
+                    "total", result.videos().size(),
+                    "videos", result.videos()
             ));
         } catch (Exception e) {
             log.error("Error fetching playlist info", e);

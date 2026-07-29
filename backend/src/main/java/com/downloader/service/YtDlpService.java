@@ -28,14 +28,15 @@ public class YtDlpService {
     private String ffmpegPath;
 
     /**
-     * Lấy thông tin playlist (danh sách video)
+     * Lấy thông tin playlist (danh sách video) + tên playlist
      */
-    public List<VideoInfo> getPlaylistInfo(String playlistUrl) throws Exception {
+    public PlaylistResult getPlaylistInfo(String playlistUrl) throws Exception {
         List<String> command = new ArrayList<>();
         command.add(ytDlpPath);
         command.add("--flat-playlist");
         command.add("--print");
-        command.add("%(id)s|%(title)s|%(duration_string)s|%(webpage_url)s");
+        // Thêm playlist_title vào đầu mỗi dòng
+        command.add("%(playlist_title)s|%(id)s|%(title)s|%(duration_string)s|%(webpage_url)s");
         command.add("--no-warnings");
         command.add(playlistUrl);
 
@@ -45,6 +46,7 @@ public class YtDlpService {
         Process process = pb.start();
 
         List<VideoInfo> videos = new ArrayList<>();
+        String playlistTitle = "";
         int index = 1;
 
         try (BufferedReader reader = new BufferedReader(
@@ -53,13 +55,18 @@ public class YtDlpService {
             while ((line = reader.readLine()) != null) {
                 line = line.trim();
                 if (line.isEmpty()) continue;
-                String[] parts = line.split("\\|", 4);
-                if (parts.length >= 2) {
+                // parts: [0]=playlistTitle, [1]=id, [2]=title, [3]=duration, [4]=url
+                String[] parts = line.split("\\|", 5);
+                if (parts.length >= 3) {
+                    // Lấy tên playlist từ video đầu tiên
+                    if (playlistTitle.isEmpty() && parts[0] != null && !parts[0].equals("NA")) {
+                        playlistTitle = parts[0].trim();
+                    }
                     VideoInfo video = VideoInfo.builder()
-                            .id(parts.length > 0 ? parts[0] : "")
-                            .title(parts.length > 1 ? parts[1] : "Unknown")
-                            .duration(parts.length > 2 ? parts[2] : "")
-                            .url(parts.length > 3 ? parts[3] : "")
+                            .id(parts.length > 1 ? parts[1] : "")
+                            .title(parts.length > 2 ? parts[2] : "Unknown")
+                            .duration(parts.length > 3 ? parts[3] : "")
+                            .url(parts.length > 4 ? parts[4] : "")
                             .index(index++)
                             .status(VideoInfo.VideoStatus.PENDING)
                             .progress(0)
@@ -70,10 +77,15 @@ public class YtDlpService {
         }
 
         int exitCode = process.waitFor();
-        log.info("yt-dlp playlist info exit code: {}, found {} videos", exitCode, videos.size());
+        log.info("yt-dlp playlist info exit code: {}, found {} videos, title: {}", exitCode, videos.size(), playlistTitle);
 
-        return videos;
+        return new PlaylistResult(playlistTitle, videos);
     }
+
+    /**
+     * Wrapper chứa tên playlist và danh sách video
+     */
+    public record PlaylistResult(String playlistTitle, List<VideoInfo> videos) {}
 
     /**
      * Tải một video cụ thể
@@ -148,11 +160,12 @@ public class YtDlpService {
                     continue;
                 }
 
-                // Already downloaded
+                // Already downloaded - file đã tồn tại, skip
                 Matcher alreadyMatcher = alreadyPattern.matcher(line);
                 if (alreadyMatcher.find()) {
                     video.setProgress(100);
-                    job.addLog("✅ Đã có sẵn: " + video.getTitle());
+                    video.setStatus(VideoInfo.VideoStatus.SKIPPED);
+                    job.addLog("⏭ Đã có sẵn (bỏ qua): " + video.getTitle());
                     callback.onProgress(100, "", "");
                     continue;
                 }
@@ -206,8 +219,9 @@ public class YtDlpService {
         // No playlist (tải từng video riêng)
         command.add("--no-playlist");
 
-        // Ghi đè nếu đã tồn tại (bỏ comment nếu muốn skip)
-        // command.add("--no-overwrites");
+        // Skip nếu file đã tồn tại trong folder (không tải lại)
+        command.add("--no-overwrites");
+        command.add("--no-continue");
 
         command.add("--progress");
         command.add("--newline");

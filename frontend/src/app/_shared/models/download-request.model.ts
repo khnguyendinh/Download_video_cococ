@@ -13,6 +13,7 @@ export interface StartDownloadResponse {
 export interface PlaylistInfoResponse {
   success: boolean;
   total: number;
+  playlistTitle: string;
   videos: any[];
   message?: string;
 }
