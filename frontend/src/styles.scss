@@ -1,0 +1,250 @@
+/* ===================================================
+   YouTube Playlist Downloader - Global Dark Theme
+   =================================================== */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+// Import ng-zorro styles
+@import 'ng-zorro-antd/ng-zorro-antd.min.css';
+
+// ===== CSS Variables =====
+:root {
+  --bg-primary: #0a0e1a;
+  --bg-secondary: #0f1629;
+  --glass-bg: rgba(255, 255, 255, 0.04);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --accent-red: #ff0040;
+  --accent-purple: #7c3aed;
+  --accent-blue: #3b82f6;
+  --accent-green: #10b981;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+}
+
+// ===== Base =====
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+}
+
+// ===== Animated background =====
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 10%, rgba(124, 58, 237, 0.10) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 80%, rgba(255, 0, 64, 0.07) 0%, transparent 60%),
+    radial-gradient(ellipse 70% 50% at 50% 50%, rgba(59, 130, 246, 0.05) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+// ===== Main wrapper =====
+.main-wrapper {
+  position: relative;
+  z-index: 1;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+// ===== Ng-Zorro Dark Theme Overrides =====
+
+// Card
+.ant-card {
+  background: var(--glass-bg) !important;
+  border: 1px solid var(--glass-border) !important;
+  border-radius: 16px !important;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35) !important;
+  color: var(--text-primary) !important;
+  transition: all 0.3s ease;
+
+  &:hover {
+    border-color: rgba(255, 255, 255, 0.12) !important;
+    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.4), 0 0 30px rgba(124, 58, 237, 0.08) !important;
+  }
+
+  .ant-card-head {
+    display: none; // Dùng custom header
+  }
+}
+
+// Input
+.ant-input,
+.dark-input {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-color: var(--glass-border) !important;
+  color: var(--text-primary) !important;
+  border-radius: 8px !important;
+  padding: 10px 14px !important;
+  font-family: 'Inter', sans-serif !important;
+  transition: all 0.2s ease;
+
+  &::placeholder {
+    color: var(--text-muted) !important;
+  }
+
+  &:focus,
+  &:hover {
+    border-color: var(--accent-purple) !important;
+    background: rgba(124, 58, 237, 0.06) !important;
+    box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.15) !important;
+  }
+}
+
+// Form label
+.ant-form-item-label > label {
+  color: var(--text-secondary) !important;
+  font-weight: 600 !important;
+  font-size: 12px !important;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+// Button - primary gradient
+.btn-gradient.ant-btn-primary {
+  background: linear-gradient(135deg, #ff0040, #7c3aed) !important;
+  border: none !important;
+  box-shadow: 0 4px 20px rgba(255, 0, 64, 0.25) !important;
+  border-radius: 8px !important;
+  font-weight: 600 !important;
+  font-family: 'Inter', sans-serif !important;
+
+  &:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 28px rgba(255, 0, 64, 0.35) !important;
+    background: linear-gradient(135deg, #ff1a53, #8b4ff7) !important;
+  }
+
+  &:active:not(:disabled) {
+    transform: translateY(0);
+  }
+}
+
+// Button ghost
+.btn-ghost.ant-btn-default {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-color: var(--glass-border) !important;
+  color: var(--text-secondary) !important;
+  border-radius: 8px !important;
+  font-family: 'Inter', sans-serif !important;
+
+  &:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.08) !important;
+    border-color: rgba(255, 255, 255, 0.16) !important;
+    color: var(--text-primary) !important;
+  }
+}
+
+// Button danger
+.ant-btn-dangerous {
+  border-radius: 8px !important;
+  font-family: 'Inter', sans-serif !important;
+}
+
+// Progress bar
+.ant-progress-bg {
+  border-radius: 100px !important;
+}
+
+// Tag
+.ant-tag {
+  border-radius: 100px !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  font-family: 'Inter', sans-serif !important;
+  border: none !important;
+
+  &.ant-tag-default {
+    background: rgba(100, 116, 139, 0.15) !important;
+    color: #94a3b8 !important;
+  }
+
+  &.ant-tag-processing {
+    background: rgba(59, 130, 246, 0.15) !important;
+    color: #60a5fa !important;
+  }
+
+  &.ant-tag-success {
+    background: rgba(16, 185, 129, 0.15) !important;
+    color: #34d399 !important;
+  }
+
+  &.ant-tag-error {
+    background: rgba(255, 0, 64, 0.15) !important;
+    color: #f87171 !important;
+  }
+
+  &.ant-tag-warning {
+    background: rgba(245, 158, 11, 0.15) !important;
+    color: #fbbf24 !important;
+  }
+}
+
+// Alert
+.ant-alert {
+  border-radius: 10px !important;
+  font-family: 'Inter', sans-serif !important;
+}
+
+// Result
+.ant-result {
+  .ant-result-title {
+    color: var(--text-primary) !important;
+    font-family: 'Inter', sans-serif !important;
+    font-weight: 800 !important;
+  }
+  .ant-result-subtitle {
+    color: var(--text-secondary) !important;
+    font-family: 'Inter', sans-serif !important;
+  }
+  .ant-result-icon .anticon {
+    font-size: 56px !important;
+  }
+}
+
+// Statistic
+.ant-statistic {
+  .ant-statistic-title {
+    color: var(--text-muted) !important;
+    font-family: 'Inter', sans-serif !important;
+    font-size: 12px !important;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .ant-statistic-content {
+    font-family: 'Inter', sans-serif !important;
+    font-weight: 800 !important;
+  }
+}
+
+// Message (toast)
+.ant-message-notice-content {
+  background: rgba(15, 22, 41, 0.95) !important;
+  border: 1px solid var(--glass-border) !important;
+  border-radius: 10px !important;
+  backdrop-filter: blur(20px);
+  color: var(--text-primary) !important;
+  font-family: 'Inter', sans-serif !important;
+}
+
+// Spin
+.ant-spin-dot-item {
+  background-color: var(--accent-purple) !important;
+}

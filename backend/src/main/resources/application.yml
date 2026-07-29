@@ -1,0 +1,33 @@
+server:
+  port: 8080
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+
+spring:
+  application:
+    name: youtube-playlist-downloader
+
+  # Tăng timeout cho SSE
+  mvc:
+    async:
+      request-timeout: -1
+
+  # Serve static files (frontend)
+  web:
+    resources:
+      static-locations: classpath:/static/
+      cache:
+        period: 0
+
+logging:
+  level:
+    com.downloader: DEBUG
+    root: INFO
+
+# yt-dlp configuration
+ytdlp:
+  path: yt-dlp
+  # ffmpeg-path: C:/ffmpeg/bin/ffmpeg.exe  # Uncomment nếu cần chỉ định path ffmpeg

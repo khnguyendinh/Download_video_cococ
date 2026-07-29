@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="vi" ng-app="DownloaderApp">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Tải video YouTube từ playlist với chất lượng 720p. Nhập link playlist, chọn thư mục và bắt đầu tải ngay." />
+  <title>YouTube Playlist Downloader</title>
+  <link rel="stylesheet" href="/style.css" />
+  <!-- AngularJS -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/angular.js/1.8.3/angular.min.js"></script>
+</head>
+<body ng-controller="MainCtrl">
+
+<div id="app">
+  <div class="container">
+
+    <!-- ===== HEADER ===== -->
+    <header class="header">
+      <div class="header-logo">
+        <div class="logo-icon">▶</div>
+        <h1>YouTube Playlist Downloader</h1>
+      </div>
+      <p class="header-sub">Tải video 720p từ playlist YouTube · Tự động đặt tên theo tiêu đề video</p>
+    </header>
+
+    <!-- ===== FORM INPUT ===== -->
+    <div class="glass-card" ng-show="state !== 'done'">
+      <div class="card-title">
+        <div class="icon icon-red">⚙</div>
+        Cấu hình Download
+      </div>
+
+      <div class="form-grid">
+        <!-- Playlist URL -->
+        <div class="form-group full-width">
+          <label class="form-label" for="playlistUrl">
+            🔗 YouTube Playlist URL <span class="required">*</span>
+          </label>
+          <input
+            id="playlistUrl"
+            type="url"
+            class="form-input"
+            ng-model="form.playlistUrl"
+            ng-class="{'error': errorMsg && !form.playlistUrl}"
+            placeholder="https://www.youtube.com/playlist?list=PLxxxxxxxxxxxxxxxx"
+            ng-disabled="isDownloading()"
+          />
+          <span class="form-hint">Dán link playlist YouTube vào đây</span>
+        </div>
+
+        <!-- Save Path -->
+        <div class="form-group">
+          <label class="form-label" for="savePath">
+            📂 Đường dẫn lưu <span class="required">*</span>
+          </label>
+          <input
+            id="savePath"
+            type="text"
+            class="form-input"
+            ng-model="form.savePath"
+            ng-class="{'error': errorMsg && !form.savePath}"
+            placeholder="C:\Users\Videos hoặc D:\Downloads"
+            ng-disabled="isDownloading()"
+          />
+          <span class="form-hint">Thư mục gốc chứa folder tải về</span>
+        </div>
+
+        <!-- Folder Name -->
+        <div class="form-group">
+          <label class="form-label" for="folderName">
+            🗂 Tên Folder <span class="required">*</span>
+          </label>
+          <input
+            id="folderName"
+            type="text"
+            class="form-input"
+            ng-model="form.folderName"
+            ng-class="{'error': errorMsg && !form.folderName}"
+            placeholder="VD: My Playlist 2024"
+            ng-disabled="isDownloading()"
+          />
+          <span class="form-hint">Tên thư mục con sẽ tạo trong đường dẫn trên</span>
+        </div>
+      </div>
+
+      <!-- Error Alert -->
+      <div class="alert alert-error" ng-show="errorMsg">
+        <span>⚠️</span>
+        <span ng-bind="errorMsg"></span>
+      </div>
+
+      <!-- Playlist Preview -->
+      <div class="alert alert-info section-gap" ng-show="playlistPreview">
+        <span>ℹ️</span>
+        <span>Tìm thấy <strong ng-bind="playlistPreview.total"></strong> video trong playlist</span>
+      </div>
+
+      <!-- Actions -->
+      <div class="actions-row">
+        <button
+          id="btnStartDownload"
+          class="btn btn-primary"
+          ng-click="startDownload()"
+          ng-disabled="isDownloading() || state === 'fetching'"
+        >
+          <span ng-show="!isDownloading()">⬇ Bắt đầu tải</span>
+          <span ng-show="isDownloading()">
+            <span class="current-video-spinner" style="display:inline-block;width:14px;height:14px;vertical-align:middle;"></span>
+            &nbsp;Đang tải...
+          </span>
+        </button>
+
+        <button
+          id="btnPreview"
+          class="btn btn-ghost"
+          ng-click="previewPlaylist()"
+          ng-disabled="isDownloading() || state === 'fetching'"
+        >
+          <span ng-show="state !== 'fetching'">👁 Xem trước playlist</span>
+          <span ng-show="state === 'fetching'">🔍 Đang lấy info...</span>
+        </button>
+
+        <button
+          id="btnCancel"
+          class="btn btn-danger btn-sm"
+          ng-show="isDownloading()"
+          ng-click="cancelJob()"
+        >
+          ⛔ Hủy
+        </button>
+      </div>
+    </div>
+
+    <!-- ===== DOWNLOADING PROGRESS ===== -->
+    <div class="progress-section" ng-show="job && state !== 'idle'">
+
+      <!-- Stats Row -->
+      <div class="stats-row section-gap">
+        <div class="stat-card stat-total">
+          <div class="stat-value" ng-bind="job.totalVideos || 0"></div>
+          <div class="stat-label">Tổng video</div>
+        </div>
+        <div class="stat-card stat-completed">
+          <div class="stat-value" ng-bind="job.completedVideos || 0"></div>
+          <div class="stat-label">Đã tải</div>
+        </div>
+        <div class="stat-card stat-failed">
+          <div class="stat-value" ng-bind="job.failedVideos || 0"></div>
+          <div class="stat-label">Thất bại</div>
+        </div>
+        <div class="stat-card stat-pending">
+          <div class="stat-value" ng-bind="((job.totalVideos || 0) - (job.completedVideos || 0) - (job.failedVideos || 0)) | limitTo: 99"></div>
+          <div class="stat-label">Còn lại</div>
+        </div>
+      </div>
+
+      <!-- Overall Progress Bar -->
+      <div class="glass-card overall-progress">
+        <div class="progress-header">
+          <span class="progress-label">Tiến trình tổng thể · <span ng-bind="getJobStatusText(job.status)"></span></span>
+          <span class="progress-value" ng-bind="(job.progressPercent || 0) + '%'"></span>
+        </div>
+        <div class="progress-bar-wrapper">
+          <div class="progress-bar" ng-style="{'width': (job.progressPercent || 0) + '%'}"></div>
+        </div>
+      </div>
+
+      <!-- Current Video Banner -->
+      <div class="current-video-banner" ng-show="isDownloading() && job.currentVideoTitle">
+        <div class="current-video-spinner"></div>
+        <div class="current-video-info">
+          <div class="current-video-title" ng-bind="job.currentVideoTitle"></div>
+          <div class="current-video-pct" ng-bind="'Đang tải: ' + (job.currentVideoProgress | number:1) + '%'"></div>
+        </div>
+        <!-- mini progress bar for current video -->
+        <div style="width: 120px;">
+          <div class="progress-bar-wrapper">
+            <div class="progress-bar progress-bar-sm" ng-style="{'width': (job.currentVideoProgress || 0) + '%'}"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Two Column Layout: Video List + Log -->
+      <div class="main-layout">
+
+        <!-- Video List -->
+        <div class="glass-card">
+          <div class="card-title">
+            <div class="icon icon-blue">🎬</div>
+            Danh sách video
+            <span style="margin-left:auto; font-size:12px; font-weight:400; color:var(--text-muted);"
+                  ng-bind="(job.videos ? job.videos.length : 0) + ' video'"></span>
+          </div>
+
+          <div class="loading-state" ng-show="job.status === 'FETCHING_INFO' || (isDownloading() && (!job.videos || job.videos.length === 0))">
+            <div class="spinner-lg"></div>
+            <span>Đang lấy thông tin playlist...</span>
+          </div>
+
+          <div class="video-list" ng-show="job.videos && job.videos.length > 0">
+            <div
+              class="video-item"
+              ng-repeat="video in job.videos track by $index"
+              ng-class="{'completed': video.status === 'COMPLETED', 'failed': video.status === 'FAILED'}"
+            >
+              <!-- Index -->
+              <div class="video-index" ng-bind="video.index || ($index + 1)"></div>
+
+              <!-- Details -->
+              <div class="video-details">
+                <div class="video-title" ng-bind="video.title || 'Video ' + ($index + 1)"></div>
+                <div class="video-sub">
+                  <span class="video-duration" ng-bind="video.duration || '--:--'"></span>
+                  <div class="video-mini-bar" ng-show="video.status === 'DOWNLOADING' || video.status === 'COMPLETED'">
+                    <div class="video-mini-bar-fill" ng-style="{'width': (video.progress || 0) + '%'}"></div>
+                  </div>
+                  <span style="font-size:11px; color:var(--text-muted);" ng-show="video.progress > 0 && video.status === 'DOWNLOADING'"
+                        ng-bind="(video.progress | number:0) + '%'"></span>
+                </div>
+              </div>
+
+              <!-- Status Badge -->
+              <div class="status-badge" ng-class="getStatusBadge(video.status)">
+                <div class="badge-dot"></div>
+                <span ng-bind="getStatusText(video.status)"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Log Terminal -->
+        <div class="glass-card">
+          <div class="card-title">
+            <div class="icon icon-purple">📋</div>
+            Nhật ký hoạt động
+            <span style="margin-left:auto; font-size:12px; font-weight:400; color:var(--text-muted);"
+                  ng-bind="logs.length + ' dòng'"></span>
+          </div>
+
+          <div id="logTerminal" class="log-terminal">
+            <div ng-show="logs.length === 0" style="color:var(--text-muted); text-align:center; padding:20px 0;">
+              Đang chờ logs...
+            </div>
+            <div
+              class="log-line"
+              ng-repeat="log in logs track by $index"
+              ng-class="getLogClass(log)"
+              ng-bind="log"
+            ></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== DONE STATE ===== -->
+    <div class="glass-card result-card col-full" ng-show="state === 'done' && resultData">
+      <span class="result-icon" ng-bind="resultData.success ? '🎉' : '😞'"></span>
+      <div class="result-title" ng-bind="resultData.success ? 'Tải xuống hoàn thành!' : 'Có lỗi xảy ra'"></div>
+
+      <div style="display:flex; justify-content:center; gap:24px; margin: 20px 0;" ng-show="resultData.success">
+        <div class="stat-card stat-completed" style="min-width:120px;">
+          <div class="stat-value" ng-bind="resultData.completed || job.completedVideos"></div>
+          <div class="stat-label">Video đã tải</div>
+        </div>
+        <div class="stat-card stat-failed" style="min-width:120px;">
+          <div class="stat-value" ng-bind="resultData.failed || job.failedVideos"></div>
+          <div class="stat-label">Thất bại</div>
+        </div>
+      </div>
+
+      <p style="color:var(--text-secondary); font-size:14px;" ng-show="resultData.outputDir">
+        📁 File đã lưu tại:
+        <span class="result-path" ng-bind="resultData.outputDir"></span>
+      </p>
+
+      <p style="color:var(--text-muted); font-size:13px; margin-top:8px;" ng-show="resultData.message && !resultData.success"
+         ng-bind="resultData.message"></p>
+
+      <div style="margin-top:28px; display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
+        <button id="btnReset" class="btn btn-primary" ng-click="reset()">
+          ➕ Tải playlist mới
+        </button>
+        <button id="btnShowLogs" class="btn btn-ghost" ng-click="state = 'show_logs'">
+          📋 Xem logs
+        </button>
+      </div>
+    </div>
+
+    <!-- Log Terminal on Done state -->
+    <div class="main-layout section-gap" ng-show="state === 'show_logs'">
+      <div class="glass-card col-full">
+        <div class="card-title">
+          <div class="icon icon-purple">📋</div>
+          Nhật ký chi tiết
+          <button class="btn btn-ghost btn-sm" style="margin-left:auto;" ng-click="state = 'done'">← Quay lại</button>
+        </div>
+        <div id="logTerminalDone" class="log-terminal">
+          <div
+            class="log-line"
+            ng-repeat="log in logs track by $index"
+            ng-class="getLogClass(log)"
+            ng-bind="log"
+          ></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer style="text-align:center; padding: 32px 0 20px; color:var(--text-muted); font-size:12px;">
+      YouTube Playlist Downloader · Java 21 + Spring Boot · AngularJS · yt-dlp
+    </footer>
+
+  </div>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>
