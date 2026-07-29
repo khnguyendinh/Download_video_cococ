@@ -1,305 +1,268 @@
 <div class="downloader-page">
 
-  <!-- ===== HEADER ===== -->
+  <!-- HEADER -->
   <div class="page-header">
-    <div class="header-inner">
-      <div class="logo-wrap">
-        <span class="logo-icon">▶</span>
-        <div>
-          <h1 class="page-title">YouTube Playlist Downloader</h1>
-          <p class="page-sub">Tải video 720p · Tự động đặt tên theo tiêu đề YouTube</p>
-        </div>
+    <div class="logo-wrap">
+      <span class="logo-icon">▶</span>
+      <div>
+        <h1 class="page-title">YouTube Playlist Downloader</h1>
+        <p class="page-sub">Tải nhiều playlist · 720p · Tuần tự từng link</p>
       </div>
     </div>
   </div>
 
   <div class="page-content">
 
-    <!-- ===== FORM CARD ===== -->
-    <nz-card class="glass-card form-card" *ngIf="state !== 'done'">
-      <div class="card-header-row">
-        <span class="card-icon">⚙</span>
-        <span class="card-label">Cấu hình Download</span>
-      </div>
+    <!-- ===== INPUT SECTION ===== -->
+    <ng-container *ngIf="appState === 'input'">
+      <form [formGroup]="form" nz-form nzLayout="vertical">
 
-      <form nz-form [formGroup]="form" nzLayout="vertical">
-
-        <!-- Playlist URL -->
-        <nz-form-item>
-          <nz-form-label nzRequired>🔗 YouTube Playlist URL</nz-form-label>
-          <nz-form-control nzErrorTip="Vui lòng nhập URL playlist">
-            <input
-              nz-input
-              id="playlistUrl"
-              formControlName="playlistUrl"
-              placeholder="https://www.youtube.com/playlist?list=PLxxxxxxxxxxxxxxxx"
-              [disabled]="isDownloading"
-              class="dark-input"
-            />
-          </nz-form-control>
-        </nz-form-item>
-
-        <div class="form-row-2col">
-          <!-- Save Path -->
-          <nz-form-item>
-            <nz-form-label nzRequired>📂 Đường dẫn lưu</nz-form-label>
-            <nz-form-control nzErrorTip="Vui lòng nhập đường dẫn">
-              <input
-                nz-input
-                id="savePath"
-                formControlName="savePath"
-                placeholder="D:\Downloads hoặc C:\Users\Videos"
-                [disabled]="isDownloading"
-                class="dark-input"
-              />
-            </nz-form-control>
-            <div class="field-hint">Thư mục gốc chứa folder tải về</div>
-          </nz-form-item>
-
-          <!-- Folder Name -->
-          <nz-form-item>
-            <nz-form-label nzRequired>🗂 Tên Folder</nz-form-label>
-            <nz-form-control nzErrorTip="Vui lòng nhập tên folder">
-              <input
-                nz-input
-                id="folderName"
-                formControlName="folderName"
-                placeholder="VD: Chứng Khoán 2024"
-                [disabled]="isDownloading"
-                class="dark-input"
-              />
-            </nz-form-control>
-            <div class="field-hint">Tên folder con sẽ tạo trong đường dẫn trên</div>
-          </nz-form-item>
-        </div>
-
-        <!-- Error Alert -->
-        <nz-alert
-          *ngIf="errorMsg"
-          nzType="error"
-          [nzMessage]="errorMsg"
-          nzShowIcon
-          class="mb-16"
-        ></nz-alert>
-
-        <!-- Preview info -->
-        <nz-alert
-          *ngIf="previewData"
-          nzType="info"
-          [nzMessage]="'ℹ️ Tìm thấy ' + previewData.total + ' video trong playlist'"
-          nzShowIcon
-          class="mb-16"
-        ></nz-alert>
-
-        <!-- Actions -->
-        <div class="action-row">
-          <button
-            nz-button
-            nzType="primary"
-            id="btnStartDownload"
-            [nzLoading]="isDownloading"
-            [disabled]="isDownloading || state === 'previewing'"
-            (click)="startDownload()"
-            class="btn-gradient"
-            nzSize="large"
-          >
-            <span nz-icon nzType="download" *ngIf="!isDownloading"></span>
-            {{ isDownloading ? 'Đang tải...' : 'Bắt đầu tải' }}
-          </button>
-
-          <button
-            nz-button
-            nzType="default"
-            id="btnPreview"
-            [nzLoading]="state === 'previewing'"
-            [disabled]="isDownloading || state === 'previewing'"
-            (click)="previewPlaylist()"
-            class="btn-ghost"
-            nzSize="large"
-          >
-            <span nz-icon nzType="eye"></span>
-            {{ state === 'previewing' ? 'Đang lấy info...' : 'Xem trước playlist' }}
-          </button>
-
-          <button
-            nz-button
-            nzDanger
-            *ngIf="isDownloading"
-            id="btnCancel"
-            (click)="cancelJob()"
-            nzSize="default"
-          >
-            <span nz-icon nzType="stop"></span>
-            Hủy
-          </button>
-        </div>
-      </form>
-    </nz-card>
-
-    <!-- ===== PROGRESS SECTION ===== -->
-    <ng-container *ngIf="job && state !== 'idle'">
-
-      <!-- Stats Row -->
-      <div class="stats-row">
-        <nz-card class="stat-card">
-          <div class="stat-value text-primary">{{ job.totalVideos || 0 }}</div>
-          <div class="stat-label">Tổng video</div>
-        </nz-card>
-        <nz-card class="stat-card">
-          <div class="stat-value text-success">{{ job.completedVideos || 0 }}</div>
-          <div class="stat-label">Đã tải</div>
-        </nz-card>
-        <nz-card class="stat-card">
-          <div class="stat-value text-danger">{{ job.failedVideos || 0 }}</div>
-          <div class="stat-label">Thất bại</div>
-        </nz-card>
-        <nz-card class="stat-card">
-          <div class="stat-value text-warning">{{ pendingVideos }}</div>
-          <div class="stat-label">Còn lại</div>
-        </nz-card>
-      </div>
-
-      <!-- Overall Progress -->
-      <nz-card class="glass-card">
-        <div class="progress-header">
-          <span class="progress-label">
-            Tiến trình tổng thể · <strong>{{ getJobStatusText(job.status || '') }}</strong>
-          </span>
-          <span class="progress-pct">{{ job.progressPercent || 0 }}%</span>
-        </div>
-        <nz-progress
-          [nzPercent]="job.progressPercent || 0"
-          nzStatus="active"
-          [nzStrokeColor]="{ '0%': '#ff0040', '50%': '#7c3aed', '100%': '#3b82f6' }"
-          [nzShowInfo]="false"
-          nzStrokeWidth="10"
-        ></nz-progress>
-
-        <!-- Current video banner -->
-        <div class="current-video-banner" *ngIf="isDownloading && job.currentVideoTitle">
-          <nz-spin nzSimple [nzSize]="'small'"></nz-spin>
-          <div class="current-video-info">
-            <div class="current-video-title">{{ job.currentVideoTitle }}</div>
-            <nz-progress
-              [nzPercent]="+(job.currentVideoProgress || 0).toFixed(1)"
-              [nzShowInfo]="false"
-              nzStrokeWidth="4"
-              [nzStrokeColor]="'#7c3aed'"
-            ></nz-progress>
+        <!-- Save Path -->
+        <nz-card class="glass-card">
+          <div class="card-header-row">
+            <span class="card-icon">📂</span>
+            <span class="card-label">Đường dẫn lưu chung</span>
           </div>
-          <span class="current-pct">{{ (job.currentVideoProgress || 0).toFixed(1) }}%</span>
-        </div>
-      </nz-card>
+          <nz-form-item>
+            <nz-form-control nzErrorTip="Vui lòng nhập đường dẫn lưu">
+              <input nz-input id="savePath" formControlName="savePath"
+                placeholder="VD: D:\Downloads hoặc E:\Videos"
+                class="dark-input" nzSize="large" />
+            </nz-form-control>
+            <div class="field-hint">Thư mục gốc — mỗi playlist sẽ tạo subfolder riêng bên trong</div>
+          </nz-form-item>
+        </nz-card>
 
-      <!-- Two columns: Video list + Log -->
-      <div class="two-col-layout">
-
-        <!-- Video List -->
-        <nz-card class="glass-card video-list-card">
+        <!-- Playlist Table -->
+        <nz-card class="glass-card">
           <div class="card-header-row">
             <span class="card-icon">🎬</span>
-            <span class="card-label">Danh sách video</span>
-            <nz-tag class="ml-auto">{{ (job.videos || []).length }} video</nz-tag>
+            <span class="card-label">Danh sách Playlist</span>
+            <nz-tag class="ml-auto tag-count">{{ items.length }} playlist</nz-tag>
           </div>
 
-          <!-- Loading -->
-          <div class="loading-state" *ngIf="job.status === 'FETCHING_INFO' || (isDownloading && !(job.videos || []).length)">
-            <nz-spin nzTip="Đang lấy thông tin playlist..."></nz-spin>
-          </div>
+          <div class="playlist-table">
+            <!-- Header -->
+            <div class="table-header">
+              <div class="col-num">#</div>
+              <div class="col-url">YouTube Playlist URL</div>
+              <div class="col-folder">Tên Folder</div>
+              <div class="col-action">Thao tác</div>
+            </div>
 
-          <!-- Video list -->
-          <div class="video-list-scroll" *ngIf="(job.videos || []).length > 0">
-            <div
-              class="video-item"
-              *ngFor="let video of job.videos; trackBy: trackByVideoId"
-              [class.video-completed]="video.status === 'COMPLETED'"
-              [class.video-failed]="video.status === 'FAILED'"
-              [class.video-downloading]="video.status === 'DOWNLOADING'"
-            >
-              <div class="video-idx">{{ video.index }}</div>
-              <div class="video-details">
-                <div class="video-title" [title]="video.title">{{ video.title }}</div>
-                <div class="video-sub-row">
-                  <span class="video-duration" *ngIf="video.duration">{{ video.duration }}</span>
-                  <div class="video-mini-progress" *ngIf="video.status === 'DOWNLOADING' || video.status === 'COMPLETED'">
-                    <nz-progress
-                      [nzPercent]="+(video.progress || 0).toFixed(0)"
-                      [nzShowInfo]="false"
-                      nzSize="small"
-                      nzStrokeWidth="3"
-                      [nzStrokeColor]="video.status === 'COMPLETED' ? '#10b981' : '#7c3aed'"
-                    ></nz-progress>
+            <!-- Rows -->
+            <div formArrayName="items">
+              <div class="table-row"
+                   *ngFor="let item of items.controls; let i = index; trackBy: trackByIndex"
+                   [formGroupName]="i">
+                <div class="col-num">
+                  <span class="row-num">{{ i + 1 }}</span>
+                </div>
+
+                <div class="col-url">
+                  <nz-form-item class="mb-0">
+                    <nz-form-control [nzErrorTip]="'URL không được để trống'">
+                      <input nz-input
+                        [id]="'url_' + i"
+                        formControlName="playlistUrl"
+                        placeholder="https://www.youtube.com/playlist?list=PL..."
+                        class="dark-input" />
+                    </nz-form-control>
+                  </nz-form-item>
+
+                  <!-- Preview info -->
+                  <div class="preview-badge" *ngIf="item.get('previewState')?.value === 'done'">
+                    <nz-tag nzColor="blue">{{ item.get('previewTotal')?.value }} video</nz-tag>
+                  </div>
+                  <div class="preview-badge error" *ngIf="item.get('previewState')?.value === 'error'">
+                    <nz-tag nzColor="red">Không lấy được info</nz-tag>
                   </div>
                 </div>
+
+                <div class="col-folder">
+                  <nz-form-item class="mb-0">
+                    <nz-form-control [nzErrorTip]="'Tên folder không được để trống'">
+                      <input nz-input
+                        [id]="'folder_' + i"
+                        formControlName="folderName"
+                        placeholder="Tên folder (auto-fill khi xem trước)"
+                        class="dark-input" />
+                    </nz-form-control>
+                  </nz-form-item>
+                </div>
+
+                <div class="col-action">
+                  <button nz-button nzType="default" class="btn-preview"
+                    [nzLoading]="item.get('previewState')?.value === 'loading'"
+                    (click)="previewItem(i)"
+                    nz-tooltip nzTooltipTitle="Xem trước & auto-fill tên folder">
+                    <span nz-icon nzType="eye"></span>
+                  </button>
+                  <button nz-button nzDanger
+                    *ngIf="items.length > 1"
+                    (click)="removeItem(i)"
+                    nz-tooltip nzTooltipTitle="Xóa dòng này">
+                    <span nz-icon nzType="delete"></span>
+                  </button>
+                </div>
               </div>
-              <nz-tag [nzColor]="getVideoStatusColor(video.status)">
-                {{ video.status === 'PENDING' ? 'Chờ'
-                  : video.status === 'DOWNLOADING' ? 'Đang tải'
-                  : video.status === 'COMPLETED' ? 'Xong'
-                  : video.status === 'FAILED' ? 'Lỗi'
-                  : 'Bỏ qua' }}
-              </nz-tag>
+            </div>
+
+            <!-- Add row button -->
+            <div class="add-row-btn">
+              <button nz-button nzType="dashed" (click)="addItem()" class="btn-add-row">
+                <span nz-icon nzType="plus"></span>
+                Thêm playlist
+              </button>
+            </div>
+          </div>
+
+          <!-- Actions -->
+          <div class="action-row">
+            <button nz-button nzType="primary" nzSize="large" id="btnStartAll"
+              class="btn-gradient" (click)="startAll()">
+              <span nz-icon nzType="download"></span>
+              Tải tất cả ({{ items.length }} playlist)
+            </button>
+            <div class="sequential-hint">
+              <span nz-icon nzType="ordered-list"></span>
+              Chạy tuần tự: playlist 1 → 2 → 3 ...
             </div>
           </div>
         </nz-card>
-
-        <!-- Log Terminal -->
-        <nz-card class="glass-card log-card">
-          <div class="card-header-row">
-            <span class="card-icon">📋</span>
-            <span class="card-label">Nhật ký hoạt động</span>
-            <nz-tag class="ml-auto">{{ logs.length }} dòng</nz-tag>
-          </div>
-
-          <div class="log-terminal" #logContainer>
-            <div
-              *ngFor="let log of logs; trackBy: trackByIndex"
-              class="log-line"
-              [ngClass]="getLogClass(log)"
-            >{{ log }}</div>
-            <div *ngIf="!logs.length" class="log-empty">Đang chờ logs...</div>
-          </div>
-        </nz-card>
-
-      </div>
+      </form>
     </ng-container>
 
-    <!-- ===== DONE STATE ===== -->
-    <nz-card class="glass-card result-card" *ngIf="state === 'done' && resultData">
-      <nz-result
-        [nzIcon]="resultData.success ? 'check-circle' : 'close-circle'"
-        [nzStatus]="resultData.success ? 'success' : 'error'"
-        [nzTitle]="resultData.success ? 'Tải xuống hoàn thành!' : 'Có lỗi xảy ra'"
-        [nzSubTitle]="resultData.message"
-      >
-        <ng-template nzExtra>
-          <div class="result-stats" *ngIf="resultData.success">
-            <nz-statistic
-              nzTitle="Video đã tải"
-              [nzValue]="resultData.completed || job.completedVideos || 0"
-              [nzValueStyle]="{ color: '#10b981' }"
-            ></nz-statistic>
-            <nz-statistic
-              nzTitle="Thất bại"
-              [nzValue]="resultData.failed || job.failedVideos || 0"
-              [nzValueStyle]="{ color: '#ef4444' }"
-            ></nz-statistic>
-          </div>
+    <!-- ===== RUNNING / DONE SECTION ===== -->
+    <ng-container *ngIf="appState === 'running' || appState === 'done'">
 
-          <div class="result-path" *ngIf="resultData.outputDir">
-            <span nz-icon nzType="folder-open" nzTheme="outline"></span>
-            <code>{{ resultData.outputDir }}</code>
-          </div>
+      <!-- Summary stats -->
+      <div class="stats-row">
+        <nz-card class="stat-card">
+          <div class="stat-value">{{ jobStates.length }}</div>
+          <div class="stat-label">Tổng playlist</div>
+        </nz-card>
+        <nz-card class="stat-card">
+          <div class="stat-value text-warning">{{ totalPending }}</div>
+          <div class="stat-label">⏳ Chờ</div>
+        </nz-card>
+        <nz-card class="stat-card">
+          <div class="stat-value text-primary">{{ totalRunning }}</div>
+          <div class="stat-label">⬇ Đang tải</div>
+        </nz-card>
+        <nz-card class="stat-card">
+          <div class="stat-value text-success">{{ totalCompleted }}</div>
+          <div class="stat-label">✅ Xong</div>
+        </nz-card>
+        <nz-card class="stat-card">
+          <div class="stat-value text-danger">{{ totalFailed }}</div>
+          <div class="stat-label">❌ Lỗi</div>
+        </nz-card>
+      </div>
 
-          <div class="result-actions">
-            <button nz-button nzType="primary" class="btn-gradient" (click)="reset()" nzSize="large">
-              <span nz-icon nzType="plus"></span>
-              Tải playlist mới
-            </button>
+      <!-- Done banner -->
+      <nz-alert *ngIf="appState === 'done'"
+        nzType="success"
+        nzMessage="🎉 Tất cả playlist đã xử lý xong!"
+        nzShowIcon
+        class="done-banner">
+      </nz-alert>
+
+      <!-- Job Cards -->
+      <nz-card class="glass-card job-card"
+        *ngFor="let js of jobStates; let i = index; trackBy: trackByJobId">
+
+        <!-- Job header row -->
+        <div class="job-header" (click)="js.expanded = !js.expanded">
+          <div class="job-num">{{ i + 1 }}</div>
+          <div class="job-info">
+            <div class="job-folder-name">{{ js.folderName }}</div>
+            <div class="job-url">{{ js.playlistUrl }}</div>
           </div>
-        </ng-template>
-      </nz-result>
-    </nz-card>
+          <div class="job-meta">
+            <nz-tag [nzColor]="getStatusColor(js.status)" class="status-tag">
+              {{ getStatusText(js.status) }}
+            </nz-tag>
+            <span class="job-pct">{{ js.progressPercent }}%</span>
+          </div>
+          <span nz-icon [nzType]="js.expanded ? 'up' : 'down'" class="expand-icon"></span>
+        </div>
+
+        <!-- Overall progress bar -->
+        <nz-progress
+          [nzPercent]="js.progressPercent"
+          [nzStatus]="js.status === 'FAILED' ? 'exception' : js.status === 'COMPLETED' ? 'success' : 'active'"
+          [nzStrokeColor]="{ '0%': '#ff0040', '50%': '#7c3aed', '100%': '#3b82f6' }"
+          [nzShowInfo]="false"
+          nzStrokeWidth="6"
+          class="job-progress-bar">
+        </nz-progress>
+
+        <!-- Current video (khi đang tải) -->
+        <div class="current-video-row" *ngIf="js.status === 'DOWNLOADING' && js.currentVideoTitle">
+          <nz-spin nzSimple [nzSize]="'small'"></nz-spin>
+          <div class="cv-info">
+            <span class="cv-title">{{ js.currentVideoTitle }}</span>
+            <nz-progress [nzPercent]="+(js.currentVideoProgress || 0).toFixed(1)"
+              [nzShowInfo]="false" nzStrokeWidth="3"
+              [nzStrokeColor]="'#7c3aed'" class="cv-progress"></nz-progress>
+          </div>
+          <span class="cv-pct">{{ (js.currentVideoProgress || 0).toFixed(1) }}%</span>
+        </div>
+
+        <!-- Stats mini row -->
+        <div class="job-stats-row">
+          <span class="jstat">📹 {{ js.totalVideos }} video</span>
+          <span class="jstat text-success">✅ {{ js.completedVideos }}</span>
+          <span class="jstat text-danger">❌ {{ js.failedVideos }}</span>
+          <span class="jstat text-muted" *ngIf="js.status === 'PENDING'">⏳ Đang chờ lượt...</span>
+        </div>
+
+        <!-- Expanded: video list + logs -->
+        <div class="job-expanded-content" *ngIf="js.expanded">
+          <div class="two-col-expand">
+            <!-- Video list -->
+            <div class="expand-section">
+              <div class="expand-label">🎬 Danh sách video ({{ js.videos.length }})</div>
+              <div class="video-list-scroll">
+                <div *ngFor="let v of js.videos; trackBy: trackByVideoId"
+                  class="video-item-mini"
+                  [class.vi-done]="v.status === 'COMPLETED'"
+                  [class.vi-fail]="v.status === 'FAILED'"
+                  [class.vi-skip]="v.status === 'SKIPPED'"
+                  [class.vi-dl]="v.status === 'DOWNLOADING'">
+                  <span class="vi-idx">{{ v.index }}</span>
+                  <span class="vi-title" [title]="v.title">{{ v.title }}</span>
+                  <nz-tag [nzColor]="getVideoStatusColor(v.status)" class="vi-tag">
+                    {{ v.status === 'COMPLETED' ? '✅' : v.status === 'FAILED' ? '❌' :
+                       v.status === 'DOWNLOADING' ? '⬇' : v.status === 'SKIPPED' ? '⏭' : '⏳' }}
+                  </nz-tag>
+                </div>
+                <div *ngIf="!js.videos.length" class="empty-list">Chưa có dữ liệu</div>
+              </div>
+            </div>
+
+            <!-- Logs -->
+            <div class="expand-section">
+              <div class="expand-label">📋 Logs ({{ js.logs.length }} dòng)</div>
+              <div class="log-terminal-mini">
+                <div *ngFor="let log of js.logs" class="log-line-mini">{{ log }}</div>
+                <div *ngIf="!js.logs.length" class="empty-list">Chưa có log</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </nz-card>
+
+      <!-- Reset button -->
+      <div class="reset-row" *ngIf="appState === 'done'">
+        <button nz-button nzType="primary" class="btn-gradient" nzSize="large" (click)="reset()">
+          <span nz-icon nzType="plus"></span>
+          Tải batch mới
+        </button>
+      </div>
+
+    </ng-container>
 
   </div>
 </div>

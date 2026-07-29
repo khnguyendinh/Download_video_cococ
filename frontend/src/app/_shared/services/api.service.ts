@@ -26,6 +26,10 @@ export class ApiService {
     return this.http.post<StartDownloadResponse>(`${this.baseUrl}/api/download/start`, request);
   }
 
+  batchDownload(request: { savePath: string; items: { playlistUrl: string; folderName: string }[] }): Observable<any> {
+    return this.http.post<any>(`${this.baseUrl}/api/download/batch`, request);
+  }
+
   getJobStatus(jobId: string): Observable<DownloadJob> {
     return this.http.get<DownloadJob>(`${this.baseUrl}/api/download/status/${jobId}`);
   }

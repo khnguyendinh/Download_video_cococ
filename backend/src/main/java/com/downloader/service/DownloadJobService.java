@@ -57,6 +57,33 @@ public class DownloadJobService {
      */
     @Async
     public void executeJob(String jobId) {
+        executeJobInternal(jobId);
+    }
+
+    /**
+     * Thực thi nhiều jobs TUẦN TỰ (lần lượt từng job) trong 1 background thread
+     */
+    @Async
+    public void executeJobsSequentially(List<String> jobIds) {
+        log.info("Starting sequential batch: {} jobs", jobIds.size());
+        for (String jobId : jobIds) {
+            DownloadJob job = jobs.get(jobId);
+            if (job == null) continue;
+            if (job.getStatus() == DownloadJob.JobStatus.CANCELLED) {
+                log.info("Job {} was cancelled, skipping", jobId);
+                continue;
+            }
+            log.info("Sequential batch: executing job {} (folder: {})", jobId, job.getFolderName());
+            executeJobInternal(jobId);
+            log.info("Sequential batch: job {} finished with status {}", jobId, job.getStatus());
+        }
+        log.info("Sequential batch finished all {} jobs", jobIds.size());
+    }
+
+    /**
+     * Logic nội bộ thực sự download — gọi từ cả executeJob và executeJobsSequentially
+     */
+    private void executeJobInternal(String jobId) {
         DownloadJob job = jobs.get(jobId);
         if (job == null) {
             log.error("Job not found: {}", jobId);

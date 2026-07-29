@@ -1,48 +1,43 @@
-import { Component, OnDestroy, OnInit, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
-import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { Component, OnDestroy, OnInit } from '@angular/core';
+import { FormArray, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Subscription } from 'rxjs';
 import { NzMessageService } from 'ng-zorro-antd/message';
 
 import { ApiService } from '../../_shared/services/api.service';
 import { SseService } from '../../_shared/services/sse.service';
-import { DownloadJob, JobStatus } from '../../_shared/models/download-job.model';
 import { VideoInfo } from '../../_shared/models/video-info.model';
-import {
-  DoneEvent,
-  StatusEvent,
-  ProgressEvent,
-} from '../../_shared/models/download-request.model';
+import { DownloadJob, JobStatus } from '../../_shared/models/download-job.model';
+import { DoneEvent, StatusEvent, ProgressEvent } from '../../_shared/models/download-request.model';
+
+// Trạng thái từng job trên UI
+export interface JobState {
+  jobId: string;
+  folderName: string;
+  playlistUrl: string;
+  status: JobStatus;
+  totalVideos: number;
+  completedVideos: number;
+  failedVideos: number;
+  progressPercent: number;
+  currentVideoTitle: string;
+  currentVideoProgress: number;
+  videos: VideoInfo[];
+  logs: string[];
+  expanded: boolean;
+  doneData?: DoneEvent;
+  eventSource?: EventSource;
+  subs: Subscription[];
+}
 
 @Component({
   selector: 'app-downloader',
   templateUrl: './downloader.component.html',
   styleUrls: ['./downloader.component.scss'],
 })
-export class DownloaderComponent implements OnInit, OnDestroy, AfterViewChecked {
-  @ViewChild('logContainer') logContainer!: ElementRef;
-
+export class DownloaderComponent implements OnInit, OnDestroy {
   form!: FormGroup;
-  state: 'idle' | 'previewing' | 'downloading' | 'done' = 'idle';
-
-  job: Partial<DownloadJob> = {
-    status: 'PENDING',
-    totalVideos: 0,
-    completedVideos: 0,
-    failedVideos: 0,
-    progressPercent: 0,
-    currentVideoProgress: 0,
-    videos: [],
-    logs: [],
-  };
-
-  resultData: DoneEvent | null = null;
-  previewData: { total: number; videos: VideoInfo[] } | null = null;
-  errorMsg: string = '';
-  logs: string[] = [];
-  shouldScrollLog = false;
-
-  private subscriptions: Subscription[] = [];
-  private eventSource: EventSource | null = null;
+  appState: 'input' | 'running' | 'done' = 'input';
+  jobStates: JobState[] = [];
 
   constructor(
     private fb: FormBuilder,
@@ -53,262 +48,245 @@ export class DownloaderComponent implements OnInit, OnDestroy, AfterViewChecked 
 
   ngOnInit(): void {
     this.form = this.fb.group({
-      playlistUrl: ['', [Validators.required]],
-      savePath: ['', [Validators.required]],
-      folderName: ['', [Validators.required]],
+      savePath: ['', Validators.required],
+      items: this.fb.array([this.createItem()]),
     });
-  }
-
-  ngAfterViewChecked(): void {
-    if (this.shouldScrollLog) {
-      this.scrollLogToBottom();
-      this.shouldScrollLog = false;
-    }
   }
 
   ngOnDestroy(): void {
-    this.cleanupSse();
+    this.jobStates.forEach((j) => this.cleanupJob(j));
   }
 
-  // =====================
-  // Getters / Helpers
-  // =====================
-  get isDownloading(): boolean {
-    return this.state === 'downloading';
+  // ========================
+  // Form helpers
+  // ========================
+  get items(): FormArray {
+    return this.form.get('items') as FormArray;
   }
 
-  get pendingVideos(): number {
-    return (this.job.totalVideos || 0) - (this.job.completedVideos || 0) - (this.job.failedVideos || 0);
+  createItem(): FormGroup {
+    return this.fb.group({
+      playlistUrl: ['', Validators.required],
+      folderName: ['', Validators.required],
+      previewState: ['idle'], // idle | loading | done | error
+      previewTotal: [0],
+    });
   }
 
-  getVideoStatusColor(status: string): string {
-    const map: Record<string, string> = {
-      PENDING: 'default',
-      DOWNLOADING: 'processing',
-      COMPLETED: 'success',
-      FAILED: 'error',
-      SKIPPED: 'warning',
-    };
-    return map[status] || 'default';
+  addItem(): void {
+    this.items.push(this.createItem());
   }
 
-  getJobStatusText(status: string): string {
-    const map: Record<string, string> = {
-      PENDING: '⏳ Chuẩn bị',
-      FETCHING_INFO: '🔍 Đang lấy thông tin...',
-      DOWNLOADING: '⬇ Đang tải',
-      COMPLETED: '✅ Hoàn thành',
-      FAILED: '❌ Thất bại',
-      CANCELLED: '⛔ Đã hủy',
-    };
-    return map[status] || status;
+  removeItem(i: number): void {
+    if (this.items.length > 1) this.items.removeAt(i);
   }
 
-  getLogClass(log: string): string {
-    if (log.includes('✅') || log.includes('Hoàn thành')) return 'log-success';
-    if (log.includes('❌') || log.includes('Lỗi') || log.includes('ERROR')) return 'log-error';
-    if (log.includes('⬇') || log.includes('🔍') || log.includes('ℹ')) return 'log-info';
-    return '';
-  }
+  trackByIndex(i: number): number { return i; }
+  trackByJobId(_: number, j: JobState): string { return j.jobId; }
+  trackByVideoId(_: number, v: VideoInfo): string { return v.id; }
 
-  trackByVideoId(_index: number, video: VideoInfo): string {
-    return video.id || String(_index);
-  }
+  // ========================
+  // Preview per row
+  // ========================
+  previewItem(i: number): void {
+    const ctrl = this.items.at(i) as FormGroup;
+    const url = ctrl.get('playlistUrl')?.value;
+    if (!url) { this.message.warning('Vui lòng nhập URL'); return; }
 
-  trackByIndex(index: number): number {
-    return index;
-  }
+    ctrl.get('previewState')?.setValue('loading');
 
-  // =====================
-  // Actions
-  // =====================
-  previewPlaylist(): void {
-    if (!this.form.get('playlistUrl')?.value) {
-      this.errorMsg = 'Vui lòng nhập URL playlist';
-      return;
-    }
-    this.errorMsg = '';
-    this.state = 'previewing';
-    this.previewData = null;
-
-    this.api.getPlaylistInfo(this.form.get('playlistUrl')!.value).subscribe({
+    this.api.getPlaylistInfo(url).subscribe({
       next: (res) => {
-        this.previewData = { total: res.total, videos: res.videos };
-        this.state = 'idle';
-
-        // Auto-fill tên folder từ tên playlist nếu chưa nhập
-        if (res.playlistTitle && !this.form.get('folderName')?.value) {
-          this.form.get('folderName')?.setValue(res.playlistTitle);
+        ctrl.get('previewState')?.setValue('done');
+        ctrl.get('previewTotal')?.setValue(res.total);
+        // Auto-fill folder name từ tên playlist nếu chưa nhập
+        if (res.playlistTitle && !ctrl.get('folderName')?.value) {
+          ctrl.get('folderName')?.setValue(res.playlistTitle);
         }
-
-        this.message.success(`Tìm thấy ${res.total} video · Playlist: "${res.playlistTitle || 'N/A'}"`);
+        this.message.success(`[Dòng ${i + 1}] Tìm thấy ${res.total} video · "${res.playlistTitle}"`);
       },
-      error: (err) => {
-        this.state = 'idle';
-        this.errorMsg = err?.error?.message || 'Không thể lấy thông tin playlist';
+      error: () => {
+        ctrl.get('previewState')?.setValue('error');
+        this.message.error(`[Dòng ${i + 1}] Không lấy được thông tin playlist`);
       },
     });
   }
 
-  startDownload(): void {
+  // ========================
+  // Start batch download
+  // ========================
+  startAll(): void {
     if (this.form.invalid) {
-      Object.values(this.form.controls).forEach((c) => c.markAsDirty());
+      this.form.markAllAsTouched();
+      this.items.controls.forEach((c) => c.markAllAsTouched());
+      this.message.error('Vui lòng điền đầy đủ thông tin');
       return;
     }
 
-    this.errorMsg = '';
-    this.resultData = null;
-    this.logs = [];
-    this.state = 'downloading';
-    this.job = {
-      status: 'PENDING',
-      totalVideos: 0,
-      completedVideos: 0,
-      failedVideos: 0,
-      progressPercent: 0,
-      currentVideoProgress: 0,
-      videos: [],
-      logs: [],
-    };
+    const savePath = this.form.get('savePath')?.value;
+    const itemList = this.items.value.map((it: any) => ({
+      playlistUrl: it.playlistUrl,
+      folderName: it.folderName,
+    }));
 
-    this.api.startDownload(this.form.value).subscribe({
+    this.appState = 'running';
+    this.jobStates = [];
+
+    this.api.batchDownload({ savePath, items: itemList }).subscribe({
       next: (res) => {
-        if (res.success) {
-          this.addLog(`🚀 Job ID: ${res.jobId}`);
-          this.connectSse(res.jobId);
-        } else {
-          this.state = 'idle';
-          this.errorMsg = res.message;
+        if (!res.success) {
+          this.message.error(res.message || 'Lỗi khởi động');
+          this.appState = 'input';
+          return;
         }
+
+        // Tạo jobState cho từng job trả về
+        this.jobStates = res.jobs.map((j: any) => ({
+          jobId: j.jobId,
+          folderName: j.folderName,
+          playlistUrl: j.playlistUrl,
+          status: 'PENDING' as JobStatus,
+          totalVideos: 0,
+          completedVideos: 0,
+          failedVideos: 0,
+          progressPercent: 0,
+          currentVideoTitle: '',
+          currentVideoProgress: 0,
+          videos: [],
+          logs: [`🚀 Job đã tạo cho folder: ${j.folderName}`],
+          expanded: false,
+          subs: [],
+        }));
+
+        // Kết nối SSE từng job
+        this.jobStates.forEach((js) => this.connectSse(js));
+
+        this.message.success(`Đã khởi động ${res.jobs.length} playlist — chạy tuần tự`);
       },
       error: (err) => {
-        this.state = 'idle';
-        this.errorMsg = err?.error?.message || 'Lỗi khởi động download';
+        this.appState = 'input';
+        this.message.error(err?.error?.message || 'Lỗi kết nối server');
       },
     });
-  }
-
-  cancelJob(): void {
-    if (this.job.id) {
-      this.api.cancelJob(this.job.id).subscribe({
-        next: () => this.message.warning('Đã gửi lệnh hủy'),
-        error: () => this.message.error('Không thể hủy job'),
-      });
-    }
   }
 
   reset(): void {
-    this.cleanupSse();
-    this.state = 'idle';
-    this.job = { status: 'PENDING', totalVideos: 0, completedVideos: 0, failedVideos: 0, progressPercent: 0, currentVideoProgress: 0, videos: [], logs: [] };
-    this.resultData = null;
-    this.previewData = null;
-    this.logs = [];
-    this.errorMsg = '';
+    this.jobStates.forEach((j) => this.cleanupJob(j));
+    this.jobStates = [];
+    this.appState = 'input';
     this.form.reset();
+    this.items.clear();
+    this.items.push(this.createItem());
   }
 
-  // =====================
-  // SSE
-  // =====================
-  private connectSse(jobId: string): void {
-    this.cleanupSse();
-    const es = this.sse.connect(jobId);
-    this.eventSource = es;
+  // ========================
+  // SSE per job
+  // ========================
+  private connectSse(js: JobState): void {
+    const es = new EventSource(`/api/download/progress/${js.jobId}`);
+    js.eventSource = es;
 
-    // status event
-    const statusSub = this.sse.listenOn<StatusEvent>(es, 'status').subscribe((data) => {
-      this.job.status = data.status as JobStatus;
-      this.job.totalVideos = data.totalVideos;
-      this.job.completedVideos = data.completedVideos;
-      this.job.failedVideos = data.failedVideos;
-      this.job.progressPercent = data.progressPercent;
-      this.job.currentVideoTitle = data.currentVideoTitle;
-      this.job.currentVideoProgress = data.currentVideoProgress;
-      if (data.logs?.length) {
-        this.logs = [...data.logs];
-        this.shouldScrollLog = true;
-      }
-    });
+    const onStatus = (e: MessageEvent) => {
+      const d: StatusEvent = JSON.parse(e.data);
+      js.status = d.status as JobStatus;
+      js.totalVideos = d.totalVideos;
+      js.completedVideos = d.completedVideos;
+      js.failedVideos = d.failedVideos;
+      js.progressPercent = d.progressPercent;
+      js.currentVideoTitle = d.currentVideoTitle;
+      js.currentVideoProgress = d.currentVideoProgress;
+      if (d.logs?.length) js.logs = [...d.logs];
+    };
 
-    // playlist_info event
-    const playlistSub = this.sse.listenOn<{ videos: VideoInfo[]; total: number }>(es, 'playlist_info').subscribe((data) => {
-      this.job.totalVideos = data.total;
-      this.job.videos = [...data.videos];
-    });
+    const onPlaylist = (e: MessageEvent) => {
+      const d = JSON.parse(e.data);
+      js.totalVideos = d.total;
+      js.videos = [...d.videos];
+    };
 
-    // video_start event
-    const videoStartSub = this.sse.listenOn<{ video: VideoInfo }>(es, 'video_start').subscribe((data) => {
-      this.updateVideo(data.video);
-      this.shouldScrollLog = true;
-    });
+    const onVideoStart = (e: MessageEvent) => {
+      const d = JSON.parse(e.data);
+      this.updateVideo(js, d.video);
+    };
 
-    // progress event
-    const progressSub = this.sse.listenOn<ProgressEvent>(es, 'progress').subscribe((data) => {
-      this.updateVideoProgress(data.videoId, data.percent);
-      this.job.currentVideoProgress = data.percent;
-    });
+    const onProgress = (e: MessageEvent) => {
+      const d: ProgressEvent = JSON.parse(e.data);
+      js.currentVideoProgress = d.percent;
+      this.updateVideoProgress(js, d.videoId, d.percent);
+    };
 
-    // video_done event
-    const videoDoneSub = this.sse.listenOn<{ video: VideoInfo }>(es, 'video_done').subscribe((data) => {
-      this.updateVideo(data.video);
-    });
+    const onVideoDone = (e: MessageEvent) => {
+      const d = JSON.parse(e.data);
+      this.updateVideo(js, d.video);
+    };
 
-    // done event
-    const doneSub = this.sse.listenOn<DoneEvent>(es, 'done').subscribe((data) => {
-      this.resultData = data;
-      this.state = 'done';
-      this.cleanupSse();
-      if (data.success) {
-        this.message.success('Tải xuống hoàn thành!');
-      } else {
-        this.message.error(data.message || 'Có lỗi xảy ra');
-      }
-    });
+    const onDone = (e: MessageEvent) => {
+      const d: DoneEvent = JSON.parse(e.data);
+      js.doneData = d;
+      js.status = d.success ? 'COMPLETED' : 'FAILED';
+      js.progressPercent = 100;
+      es.close();
+      this.checkAllDone();
+    };
 
-    this.subscriptions.push(statusSub, playlistSub, videoStartSub, progressSub, videoDoneSub, doneSub);
+    es.addEventListener('status', onStatus as EventListener);
+    es.addEventListener('playlist_info', onPlaylist as EventListener);
+    es.addEventListener('video_start', onVideoStart as EventListener);
+    es.addEventListener('progress', onProgress as EventListener);
+    es.addEventListener('video_done', onVideoDone as EventListener);
+    es.addEventListener('done', onDone as EventListener);
   }
 
-  private updateVideo(video: VideoInfo): void {
-    if (!this.job.videos) this.job.videos = [];
-    const idx = this.job.videos.findIndex((v) => v.id === video.id);
+  private checkAllDone(): void {
+    const allFinished = this.jobStates.every(
+      (j) => j.status === 'COMPLETED' || j.status === 'FAILED' || j.status === 'CANCELLED'
+    );
+    if (allFinished) {
+      this.appState = 'done';
+      this.message.success('Tất cả playlist đã xử lý xong!');
+    }
+  }
+
+  private updateVideo(js: JobState, video: VideoInfo): void {
+    const idx = js.videos.findIndex((v) => v.id === video.id);
+    if (idx >= 0) js.videos[idx] = { ...js.videos[idx], ...video };
+    else js.videos.push(video);
+    js.videos = [...js.videos];
+  }
+
+  private updateVideoProgress(js: JobState, videoId: string, pct: number): void {
+    const idx = js.videos.findIndex((v) => v.id === videoId);
     if (idx >= 0) {
-      this.job.videos[idx] = { ...this.job.videos[idx], ...video };
-    } else {
-      this.job.videos.push(video);
-    }
-    // Trigger change detection
-    this.job.videos = [...this.job.videos];
-  }
-
-  private updateVideoProgress(videoId: string, percent: number): void {
-    if (!this.job.videos) return;
-    const idx = this.job.videos.findIndex((v) => v.id === videoId);
-    if (idx >= 0) {
-      this.job.videos[idx] = { ...this.job.videos[idx], progress: percent };
-      this.job.videos = [...this.job.videos];
+      js.videos[idx] = { ...js.videos[idx], progress: pct };
+      js.videos = [...js.videos];
     }
   }
 
-  private addLog(msg: string): void {
-    const now = new Date();
-    const ts = [now.getHours(), now.getMinutes(), now.getSeconds()]
-      .map((n) => n.toString().padStart(2, '0'))
-      .join(':');
-    this.logs.push(`[${ts}] ${msg}`);
-    this.shouldScrollLog = true;
+  private cleanupJob(js: JobState): void {
+    js.subs.forEach((s) => s.unsubscribe());
+    js.eventSource?.close();
   }
 
-  private scrollLogToBottom(): void {
-    if (this.logContainer?.nativeElement) {
-      this.logContainer.nativeElement.scrollTop = this.logContainer.nativeElement.scrollHeight;
-    }
+  // ========================
+  // UI helpers
+  // ========================
+  getStatusColor(s: string): string {
+    return ({ PENDING: 'default', FETCHING_INFO: 'processing', DOWNLOADING: 'processing',
+      COMPLETED: 'success', FAILED: 'error', CANCELLED: 'warning' } as any)[s] || 'default';
   }
 
-  private cleanupSse(): void {
-    this.subscriptions.forEach((s) => s.unsubscribe());
-    this.subscriptions = [];
-    this.sse.disconnect();
-    this.eventSource = null;
+  getStatusText(s: string): string {
+    return ({ PENDING: '⏳ Chờ', FETCHING_INFO: '🔍 Lấy info...', DOWNLOADING: '⬇ Đang tải',
+      COMPLETED: '✅ Xong', FAILED: '❌ Thất bại', CANCELLED: '⛔ Hủy' } as any)[s] || s;
   }
+
+  getVideoStatusColor(s: string): string {
+    return ({ PENDING: 'default', DOWNLOADING: 'processing', COMPLETED: 'success',
+      FAILED: 'error', SKIPPED: 'warning' } as any)[s] || 'default';
+  }
+
+  get totalCompleted(): number { return this.jobStates.filter(j => j.status === 'COMPLETED').length; }
+  get totalFailed(): number { return this.jobStates.filter(j => j.status === 'FAILED').length; }
+  get totalRunning(): number { return this.jobStates.filter(j => j.status === 'DOWNLOADING' || j.status === 'FETCHING_INFO').length; }
+  get totalPending(): number { return this.jobStates.filter(j => j.status === 'PENDING').length; }
 }
