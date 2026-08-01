@@ -134,6 +134,7 @@ public class YouTubeUploadService {
 
             session.setStatus("DONE");
             session.setFinishedAt(LocalDateTime.now());
+            saveUploadStatus(session); // Ghi upload_status.json vào folder
             sendEvent(session, "ALL_DONE", "Upload hoàn tất! " + session.getCompletedFiles() + "/" + session.getTotalFiles() + " file thành công.");
 
         } catch (Exception e) {
@@ -145,6 +146,97 @@ public class YouTubeUploadService {
             if (session.getEmitter() != null) {
                 try { session.getEmitter().complete(); } catch (Exception ignored) {}
             }
+        }
+    }
+
+    // ─────────────────────────────────────────────────────
+    // upload_status.json
+    // ─────────────────────────────────────────────────────
+
+    /** Ghi upload_status.json vào thư mục chứa video */
+    private void saveUploadStatus(UploadSession session) {
+        if (session.getFilePaths() == null || session.getFilePaths().isEmpty()) return;
+        try {
+            // Lấy folder của file đầu tiên
+            File firstFile = new File(session.getFilePaths().get(0));
+            File folder = firstFile.getParentFile();
+            if (folder == null || !folder.exists()) return;
+
+            File statusFile = new File(folder, "upload_status.json");
+
+            // Đọc status cũ nếu tồn tại (merge thêm vào, không ghi đè)
+            java.util.Map<String, Object> statusMap = new java.util.LinkedHashMap<>();
+            if (statusFile.exists()) {
+                try {
+                    statusMap = objectMapper.readValue(statusFile,
+                        new com.fasterxml.jackson.core.type.TypeReference<java.util.Map<String, Object>>() {});
+                } catch (Exception ignored) {}
+            }
+
+            // Cập nhật metadata
+            statusMap.put("folderPath", folder.getAbsolutePath());
+            statusMap.put("lastUploadAt", session.getFinishedAt().toString());
+            statusMap.put("playlistId", session.getPlaylistId());
+
+            // Merge results: ưu tiên giữ SUCCESS cũ, ghi đè nếu lần này SUCCESS
+            @SuppressWarnings("unchecked")
+            java.util.List<java.util.Map<String, Object>> existingResults =
+                (java.util.List<java.util.Map<String, Object>>) statusMap.getOrDefault("results", new java.util.ArrayList<>());
+
+            java.util.Map<String, java.util.Map<String, Object>> resultByFile = new java.util.LinkedHashMap<>();
+            for (java.util.Map<String, Object> r : existingResults) {
+                resultByFile.put((String) r.get("fileName"), r);
+            }
+
+            for (UploadSession.UploadResult r : session.getResults()) {
+                java.util.Map<String, Object> entry = new java.util.LinkedHashMap<>();
+                entry.put("fileName", r.getFileName());
+                entry.put("filePath", r.getFilePath());
+                entry.put("status", r.getStatus());
+                entry.put("videoId", r.getVideoId());
+                entry.put("error", r.getError());
+                entry.put("uploadedAt", session.getFinishedAt().toString());
+
+                // Giữ SUCCESS cũ, ghi đè chỉ khi lần này SUCCESS hoặc chưa có
+                java.util.Map<String, Object> existing = resultByFile.get(r.getFileName());
+                if (existing == null || "SUCCESS".equals(r.getStatus())) {
+                    resultByFile.put(r.getFileName(), entry);
+                }
+            }
+
+            statusMap.put("results", new java.util.ArrayList<>(resultByFile.values()));
+
+            objectMapper.writerWithDefaultPrettyPrinter().writeValue(statusFile, statusMap);
+            log.info("[Upload] Đã lưu upload_status.json tại {}", statusFile.getAbsolutePath());
+
+        } catch (Exception e) {
+            log.warn("[Upload] Không thể ghi upload_status.json: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Đọc upload_status.json trong folder (nếu có).
+     * Trả về Map: fileName → {status, videoId, error, uploadedAt}
+     */
+    public java.util.Map<String, java.util.Map<String, Object>> readUploadStatus(String folderPath) {
+        File statusFile = new File(folderPath, "upload_status.json");
+        if (!statusFile.exists()) return java.util.Collections.emptyMap();
+        try {
+            java.util.Map<String, Object> statusMap = objectMapper.readValue(statusFile,
+                new com.fasterxml.jackson.core.type.TypeReference<java.util.Map<String, Object>>() {});
+
+            @SuppressWarnings("unchecked")
+            java.util.List<java.util.Map<String, Object>> results =
+                (java.util.List<java.util.Map<String, Object>>) statusMap.getOrDefault("results", java.util.Collections.emptyList());
+
+            java.util.Map<String, java.util.Map<String, Object>> map = new java.util.LinkedHashMap<>();
+            for (java.util.Map<String, Object> r : results) {
+                map.put((String) r.get("fileName"), r);
+            }
+            return map;
+        } catch (Exception e) {
+            log.warn("[Upload] Không đọc được upload_status.json: {}", e.getMessage());
+            return java.util.Collections.emptyMap();
         }
     }
 

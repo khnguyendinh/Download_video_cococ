@@ -62,7 +62,7 @@ export class ApiService {
     return this.http.get<any>(`${this.baseUrl}/api/upload/auth-url`);
   }
 
-  scanFolder(path: string): Observable<{ files: VideoFileInfo[]; total: number; folder: string }> {
+  scanFolder(path: string): Observable<ScanFolderResponse> {
     const params = new HttpParams().set('path', path);
     return this.http.get<any>(`${this.baseUrl}/api/upload/scan-folder`, { params });
   }
@@ -76,5 +76,18 @@ export interface VideoFileInfo {
   fileName: string;
   filePath: string;
   fileSize: number;
+  previousStatus?: 'SUCCESS' | 'FAILED' | null;
+  previousVideoId?: string;
+  previousError?: string;
+  previousUploadAt?: string;
+}
+
+export interface ScanFolderResponse {
+  files: VideoFileInfo[];
+  total: number;
+  folder: string;
+  hasPreviousUpload: boolean;
+  previousFailedCount: number;
+  previousSuccessCount: number;
 }
 

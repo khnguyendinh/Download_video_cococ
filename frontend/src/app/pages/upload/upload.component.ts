@@ -1,7 +1,7 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { NzMessageService } from 'ng-zorro-antd/message';
-import { ApiService, VideoFileInfo } from '../../_shared/services/api.service';
+import { ApiService, VideoFileInfo, ScanFolderResponse } from '../../_shared/services/api.service';
 import { environment } from '../../../environments/environment';
 
 export interface UploadFileState {
@@ -16,6 +16,7 @@ export interface UploadFileState {
 export interface SelectableVideo extends VideoFileInfo {
   selected: boolean;
   formattedSize: string;
+  previousStatus?: 'SUCCESS' | 'FAILED' | null;
 }
 
 @Component({
@@ -36,6 +37,9 @@ export class UploadComponent implements OnInit, OnDestroy {
   scannedFiles: SelectableVideo[] = [];
   scanning = false;
   scanError = '';
+  hasPreviousUpload = false;
+  previousFailedCount = 0;
+  previousSuccessCount = 0;
 
   // Playlist
   playlistId = '';
@@ -130,26 +134,55 @@ export class UploadComponent implements OnInit, OnDestroy {
     this.scanning = true;
     this.scanError = '';
     this.scannedFiles = [];
+    this.hasPreviousUpload = false;
+    this.previousFailedCount = 0;
+    this.previousSuccessCount = 0;
 
     this.api.scanFolder(path).subscribe({
-      next: (res) => {
+      next: (res: ScanFolderResponse) => {
         this.scanning = false;
         if (!res.files || res.files.length === 0) {
           this.scanError = 'Không tìm thấy file video nào trong thư mục này.';
           return;
         }
+
+        this.hasPreviousUpload = res.hasPreviousUpload ?? false;
+        this.previousFailedCount = res.previousFailedCount ?? 0;
+        this.previousSuccessCount = res.previousSuccessCount ?? 0;
+
         this.scannedFiles = res.files.map(f => ({
           ...f,
-          selected: true,           // Mặc định chọn tất cả
+          // Mặc định: chọn file FAILED hoặc chưa upload; bỏ chọn SUCCESS
+          selected: f.previousStatus !== 'SUCCESS',
           formattedSize: this.formatSize(f.fileSize),
+          previousStatus: f.previousStatus ?? null,
         }));
-        this.message.success(`Tìm thấy ${res.files.length} video`);
+
+        if (this.hasPreviousUpload) {
+          if (this.previousFailedCount > 0) {
+            this.message.warning(`Có ${this.previousFailedCount} video lỗi từ lần trước — đã tự chọn để reupload`);
+          } else {
+            this.message.success(`Tất cả ${this.previousSuccessCount} video đã upload thành công trước đó`);
+          }
+        } else {
+          this.message.success(`Tìm thấy ${res.files.length} video`);
+        }
       },
       error: (err) => {
         this.scanning = false;
         this.scanError = err?.error?.error || 'Không thể quét thư mục. Kiểm tra đường dẫn.';
       }
     });
+  }
+
+  /** Chỉ chọn các video bị lỗi lần trước */
+  selectOnlyFailed(): void {
+    this.scannedFiles.forEach(f => f.selected = f.previousStatus === 'FAILED');
+  }
+
+  /** Bỏ chọn các video đã thành công */
+  selectOnlyNew(): void {
+    this.scannedFiles.forEach(f => f.selected = f.previousStatus !== 'SUCCESS');
   }
 
   get allSelected(): boolean {

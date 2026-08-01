@@ -129,6 +129,35 @@
       <!-- Video list -->
       <div class="video-list-wrap" *ngIf="scannedFiles.length > 0">
 
+        <!-- Banner: có upload_status.json -->
+        <div class="prev-upload-banner" *ngIf="hasPreviousUpload">
+          <span class="prev-icon">📄</span>
+          <span class="prev-text">
+            Tìm thấy lịch sử upload:
+            <strong class="text-green">{{ previousSuccessCount }} thành công</strong>
+            <ng-container *ngIf="previousFailedCount > 0">,
+              <strong class="text-red">{{ previousFailedCount }} lỗi</strong>
+            </ng-container>
+          </span>
+          <div class="prev-actions">
+            <button nz-button nzSize="small" class="btn-filter-fail"
+              *ngIf="previousFailedCount > 0"
+              (click)="selectOnlyFailed()"
+              id="btn-select-failed">
+              🔴 Chỉ chọn lỗi ({{ previousFailedCount }})
+            </button>
+            <button nz-button nzSize="small" class="btn-filter-new"
+              (click)="selectOnlyNew()"
+              id="btn-select-new">
+              ⚪ Chưa upload
+            </button>
+            <button nz-button nzSize="small" class="btn-recheck"
+              (click)="toggleAll(true)">
+              ✔ Chọn tất cả
+            </button>
+          </div>
+        </div>
+
         <!-- Header: tick all + stats -->
         <div class="list-header">
           <label nz-checkbox
@@ -163,6 +192,14 @@
             <div class="video-meta">
               <div class="video-name">{{ f.fileName }}</div>
               <div class="video-path">{{ f.filePath }}</div>
+            </div>
+
+            <div class="video-status-badge">
+              <nz-tag *ngIf="f.previousStatus === 'SUCCESS'" class="badge-prev-ok">✅ Đã upload</nz-tag>
+              <nz-tag *ngIf="f.previousStatus === 'FAILED'" class="badge-prev-fail"
+                [nzTooltipTitle]="f.previousError || 'Lỗi không xác định'"
+                nz-tooltip>❌ Lỗi</nz-tag>
+              <span *ngIf="!f.previousStatus" class="badge-prev-new">⚪ Mới</span>
             </div>
 
             <div class="video-size">{{ f.formattedSize }}</div>
