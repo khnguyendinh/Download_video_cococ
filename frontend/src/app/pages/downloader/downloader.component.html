@@ -6,8 +6,17 @@
       <span class="logo-icon">▶</span>
       <div>
         <h1 class="page-title">YouTube Playlist Downloader</h1>
-        <p class="page-sub">Tải nhiều playlist · 720p · Tuần tự từng link</p>
+        <p class="page-sub">Tải nhiều playlist · Chất lượng cao nhất · Tuần tự từng link</p>
       </div>
+    </div>
+    <!-- Tab Navigation -->
+    <div class="page-tabs">
+      <a class="tab-item tab-active-force" routerLink="/">
+        <span class="tab-icon">⬇</span> Tải xuống
+      </a>
+      <a class="tab-item" routerLink="/upload">
+        <span class="tab-icon">☁</span> YouTube Upload
+      </a>
     </div>
   </div>
 
@@ -136,6 +145,41 @@
     <!-- ===== RUNNING / DONE SECTION ===== -->
     <ng-container *ngIf="appState === 'running' || appState === 'done'">
 
+      <!-- Thêm playlist mới ngay trong khi đang running/done -->
+      <nz-card class="glass-card add-more-card" *ngIf="appState === 'done' || appState === 'running'">
+        <form [formGroup]="form" nz-form nzLayout="vertical">
+          <div class="card-header-row">
+            <span class="card-icon">➕</span>
+            <span class="card-label">Thêm playlist mới vào hàng chờ</span>
+          </div>
+          <nz-form-item>
+            <nz-form-control nzErrorTip="Vui lòng nhập đường dẫn lưu">
+              <input nz-input id="savePathRunning" formControlName="savePath"
+                placeholder="VD: D:\Downloads hoặc E:\Videos"
+                class="dark-input" />
+            </nz-form-control>
+          </nz-form-item>
+          <div formArrayName="items">
+            <div class="table-row" *ngFor="let item of items.controls; let i = index; trackBy: trackByIndex" [formGroupName]="i">
+              <input nz-input [id]="'url_more_' + i" formControlName="playlistUrl"
+                placeholder="YouTube Playlist URL" class="dark-input" style="margin-bottom:6px" />
+              <input nz-input [id]="'folder_more_' + i" formControlName="folderName"
+                placeholder="Tên folder" class="dark-input" />
+            </div>
+          </div>
+          <div style="margin-top: 12px; display: flex; gap: 8px">
+            <button nz-button nzType="primary" class="btn-gradient" (click)="startAll()">
+              <span nz-icon nzType="download"></span>
+              Thêm vào hàng chờ
+            </button>
+            <button nz-button nzType="dashed" (click)="addItem()">
+              <span nz-icon nzType="plus"></span>
+              Thêm dòng
+            </button>
+          </div>
+        </form>
+      </nz-card>
+
       <!-- Summary stats -->
       <div class="stats-row">
         <nz-card class="stat-card">
@@ -178,12 +222,39 @@
           <div class="job-info">
             <div class="job-folder-name">{{ js.folderName }}</div>
             <div class="job-url">{{ js.playlistUrl }}</div>
+            <!-- Thông tin thời gian -->
+            <div class="job-time-row">
+              <span class="time-badge" *ngIf="js.startedAt">
+                🕐 Bắt đầu: {{ formatDateTime(js.startedAt) }}
+              </span>
+              <span class="time-badge" *ngIf="js.finishedAt">
+                🏁 Kết thúc: {{ formatDateTime(js.finishedAt) }}
+              </span>
+              <span class="time-badge duration" *ngIf="js.durationSeconds">
+                ⏱️ {{ formatDuration(js.durationSeconds) }}
+              </span>
+            </div>
           </div>
           <div class="job-meta">
             <nz-tag [nzColor]="getStatusColor(js.status)" class="status-tag">
               {{ getStatusText(js.status) }}
             </nz-tag>
             <span class="job-pct">{{ js.progressPercent }}%</span>
+            <!-- Nút Retry (chỉ hiện khi FAILED hoặc CANCELLED) -->
+            <button nz-button nzType="primary" nzSize="small" class="btn-retry-job"
+              *ngIf="js.status === 'FAILED' || js.status === 'CANCELLED'"
+              nz-tooltip nzTooltipTitle="Tải lại từ đầu (bỏ qua file đã có)"
+              (click)="$event.stopPropagation(); retryJob(js)">
+              <span nz-icon nzType="sync"></span>
+              Tải lại
+            </button>
+            <!-- Nút xóa job -->
+            <button nz-button nzDanger nzSize="small" class="btn-delete-job"
+              nz-tooltip nzTooltipTitle="Xóa job này"
+              [disabled]="js.status === 'DOWNLOADING' || js.status === 'FETCHING_INFO'"
+              (click)="$event.stopPropagation(); confirmDeleteJob(js)">
+              <span nz-icon nzType="delete"></span>
+            </button>
           </div>
           <span nz-icon [nzType]="js.expanded ? 'up' : 'down'" class="expand-icon"></span>
         </div>
@@ -225,7 +296,7 @@
             <div class="expand-section">
               <div class="expand-label">🎬 Danh sách video ({{ js.videos.length }})</div>
               <div class="video-list-scroll">
-                <div *ngFor="let v of js.videos; trackBy: trackByVideoId"
+                <div *ngFor="let v of getSortedVideos(js.videos); trackBy: trackByVideoId"
                   class="video-item-mini"
                   [class.vi-done]="v.status === 'COMPLETED'"
                   [class.vi-fail]="v.status === 'FAILED'"
@@ -254,11 +325,19 @@
         </div>
       </nz-card>
 
-      <!-- Reset button -->
+      <!-- Reset / Retry buttons -->
       <div class="reset-row" *ngIf="appState === 'done'">
-        <button nz-button nzType="primary" class="btn-gradient" nzSize="large" (click)="reset()">
-          <span nz-icon nzType="plus"></span>
-          Tải batch mới
+        <button nz-button nzType="default" nzSize="large" (click)="reset()" style="margin-right: 8px">
+          <span nz-icon nzType="delete"></span>
+          Xóa tất cả &amp; Bắt đầu mới
+        </button>
+        <!-- Nút Retry Failed Videos — chỉ hiện khi có video bị lỗi -->
+        <button nz-button nzSize="large" class="btn-retry-all-failed"
+          *ngIf="totalFailedVideosCount > 0"
+          nz-tooltip nzTooltipTitle="Tải lại chỉ các video bị lỗi, bỏ qua video đã hoàn thành"
+          (click)="retryAllFailedVideos()">
+          <span nz-icon nzType="sync"></span>
+          Retry {{ totalFailedVideosCount }} video lỗi
         </button>
       </div>
 

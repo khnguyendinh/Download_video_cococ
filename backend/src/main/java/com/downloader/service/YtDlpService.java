@@ -190,9 +190,9 @@ public class YtDlpService {
         List<String> command = new ArrayList<>();
         command.add(ytDlpPath);
 
-        // Format: ưu tiên 720p mp4, fallback best ≤ 720p
+        // Format: tải độ phân giải cao nhất có thể (1080p, 4K tuỳ video)
         command.add("-f");
-        command.add("bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=720]+bestaudio/best[height<=720]/best");
+        command.add("bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best");
 
         // Merge thành mp4
         command.add("--merge-output-format");

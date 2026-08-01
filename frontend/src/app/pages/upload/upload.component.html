@@ -1,0 +1,270 @@
+<div class="upload-page">
+
+  <!-- HEADER + NAV TABS -->
+  <div class="page-header">
+    <div class="logo-wrap">
+      <span class="logo-icon">☁</span>
+      <div>
+        <h1 class="page-title">YouTube Upload</h1>
+        <p class="page-sub">Upload video lên YouTube · Private · Gắn vào Playlist</p>
+      </div>
+    </div>
+    <!-- Tab Navigation -->
+    <div class="page-tabs">
+      <a class="tab-item" routerLink="/" routerLinkActive="tab-active" [routerLinkActiveOptions]="{exact:true}">
+        <span class="tab-icon">⬇</span> Tải xuống
+      </a>
+      <a class="tab-item tab-active-force" routerLink="/upload">
+        <span class="tab-icon">☁</span> YouTube Upload
+      </a>
+    </div>
+  </div>
+
+  <div class="page-content">
+
+    <!-- ====== AUTH SECTION ====== -->
+    <nz-card class="glass-card">
+      <div class="card-header-row">
+        <span class="card-icon">🔑</span>
+        <span class="card-label">Kết nối Google Account</span>
+
+        <div class="ml-auto">
+          <ng-container [ngSwitch]="authStatus">
+            <nz-tag *ngSwitchCase="'checking'"         class="badge badge-checking">⏳ Đang kiểm tra...</nz-tag>
+            <nz-tag *ngSwitchCase="'redirecting'"      class="badge badge-checking">🚀 Đang chuyển hướng...</nz-tag>
+            <nz-tag *ngSwitchCase="'no-credentials'"   class="badge badge-error">⚠ Chưa có credentials.json</nz-tag>
+            <nz-tag *ngSwitchCase="'not-authenticated'" class="badge badge-warn">🔴 Chưa đăng nhập</nz-tag>
+            <nz-tag *ngSwitchCase="'authenticated'"    class="badge badge-ok">✅ Đã kết nối</nz-tag>
+          </ng-container>
+        </div>
+      </div>
+
+      <!-- No credentials warning -->
+      <nz-alert *ngIf="authStatus === 'no-credentials'" nzType="warning" nzShowIcon
+        nzMessage="Chưa có file credentials.json"
+        nzDescription="Vào Google Cloud Console → Tạo OAuth 2.0 Client ID (Desktop App) → Tải file credentials.json → Đặt vào thư mục backend/ và khởi động lại server."
+        style="margin-bottom: 16px">
+      </nz-alert>
+
+      <!-- Redirecting to Google -->
+      <div class="redirecting-wrap" *ngIf="authStatus === 'redirecting' || authStatus === 'checking'">
+        <div class="redir-spinner"></div>
+        <div class="redir-text">
+          <span *ngIf="authStatus === 'checking'">Kiểm tra trạng thái đăng nhập...</span>
+          <span *ngIf="authStatus === 'redirecting'">Chuyển hướng đến Google đăng nhập...</span>
+        </div>
+      </div>
+
+      <!-- Not authenticated fallback (lỗi lấy auth URL) -->
+      <div class="auth-actions" *ngIf="authStatus === 'not-authenticated'">
+        <nz-alert nzType="error" nzShowIcon
+          nzMessage="Không thể tự động chuyển hướng"
+          nzDescription="Không lấy được URL đăng nhập từ backend. Kiểm tra backend đang chạy."
+          style="margin-bottom: 16px">
+        </nz-alert>
+        <button nz-button nzType="primary" nzSize="large" class="btn-google" (click)="retryLogin()">
+          <span class="google-icon">G</span> Thử lại đăng nhập
+        </button>
+      </div>
+
+      <!-- Authenticated -->
+      <div class="auth-ok-row" *ngIf="authStatus === 'authenticated'">
+        <span class="auth-ok-icon">🏆</span>
+        <div>
+          <div class="auth-ok-title">Tài khoản Google đã kết nối</div>
+          <div class="auth-ok-sub">Bạn có thể bắt đầu upload video</div>
+        </div>
+        <button nz-button nzSize="small" class="btn-recheck" (click)="checkAuth()" style="margin-left:auto">
+          🔄 Đăng xuất
+        </button>
+      </div>
+    </nz-card>
+
+    <!-- ====== CONFIG SECTION ====== -->
+    <nz-card class="glass-card" *ngIf="uploadState === 'idle'">
+      <div class="card-header-row">
+        <span class="card-icon">⚙</span>
+        <span class="card-label">Cấu hình Upload</span>
+      </div>
+
+      <!-- Playlist ID -->
+      <div class="field-group">
+        <label class="field-label">
+          🎵 Playlist ID
+          <span class="field-optional">(không bắt buộc)</span>
+        </label>
+        <input nz-input [(ngModel)]="playlistId"
+          placeholder="VD: PLXwMlDZ54-AGp1X0VXJjvB9bMIgPkxbA1"
+          class="dark-input" nzSize="large" id="playlist-id-input" />
+        <div class="field-hint">
+          Lấy từ URL playlist: youtube.com/playlist?list=<strong>PLxxxx</strong>
+        </div>
+      </div>
+
+      <!-- Folder path -->
+      <div class="field-group" style="margin-top: 20px">
+        <label class="field-label">📁 Đường dẫn thư mục chứa video</label>
+        <div class="folder-input-row">
+          <input nz-input [(ngModel)]="folderPath"
+            id="folder-path-input"
+            placeholder="VD: D:\Videos  hoặc  E:\Recordings"
+            class="dark-input"
+            nzSize="large"
+            (keydown.enter)="scanFolder()" />
+          <button nz-button nzType="primary" nzSize="large" class="btn-scan"
+            [nzLoading]="scanning"
+            (click)="scanFolder()"
+            id="btn-scan-folder">
+            🔍 Quét
+          </button>
+        </div>
+        <div class="field-hint">Nhập đường dẫn đến thư mục rồi nhấn Quét — app tự tìm tất cả file video</div>
+      </div>
+
+      <!-- Scan error -->
+      <nz-alert *ngIf="scanError" nzType="warning" nzShowIcon
+        [nzMessage]="scanError" style="margin-top: 14px">
+      </nz-alert>
+
+      <!-- Video list -->
+      <div class="video-list-wrap" *ngIf="scannedFiles.length > 0">
+
+        <!-- Header: tick all + stats -->
+        <div class="list-header">
+          <label nz-checkbox
+            [ngModel]="allSelected"
+            [nzIndeterminate]="someSelected"
+            (ngModelChange)="toggleAll($event)"
+            class="tick-all-label"
+            id="chk-select-all">
+            Chọn tất cả
+            <nz-tag class="tag-count ml-8">{{ scannedFiles.length }} video</nz-tag>
+          </label>
+          <span class="selected-info" *ngIf="selectedFiles.length < scannedFiles.length">
+            <nz-tag class="badge badge-ok">✓ {{ selectedFiles.length }} đã chọn</nz-tag>
+          </span>
+        </div>
+
+        <!-- Video rows -->
+        <div class="video-rows">
+          <div class="video-row" *ngFor="let f of scannedFiles; let i = index"
+            [class.selected]="f.selected"
+            (click)="f.selected = !f.selected">
+
+            <label nz-checkbox [(ngModel)]="f.selected"
+              (click)="$event.stopPropagation()"
+              [id]="'chk-video-' + i">
+            </label>
+
+            <div class="video-ext">
+              {{ f.fileName.split('.').pop()?.toUpperCase() }}
+            </div>
+
+            <div class="video-meta">
+              <div class="video-name">{{ f.fileName }}</div>
+              <div class="video-path">{{ f.filePath }}</div>
+            </div>
+
+            <div class="video-size">{{ f.formattedSize }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Start button -->
+      <div class="action-row" style="margin-top: 24px">
+        <button nz-button nzType="primary" nzSize="large" class="btn-upload"
+          id="btn-start-upload"
+          [disabled]="!canStart"
+          (click)="startUpload()">
+          <span class="upload-icon">☁</span>
+          Upload {{ selectedFiles.length > 0 ? '(' + selectedFiles.length + ' video)' : '' }}
+          <nz-tag class="privacy-tag">🔒 Không công khai</nz-tag>
+        </button>
+        <span class="action-hint" *ngIf="authStatus === 'authenticated' && scannedFiles.length === 0">
+          Quét thư mục để chọn video
+        </span>
+      </div>
+    </nz-card>
+
+    <!-- ====== UPLOAD QUEUE ====== -->
+    <nz-card class="glass-card" *ngIf="uploadState !== 'idle'">
+      <div class="card-header-row">
+        <span class="card-icon">📤</span>
+        <span class="card-label">Upload Queue</span>
+
+        <div class="ml-auto queue-stats">
+          <nz-tag class="badge badge-ok" *ngIf="completedCount > 0">✅ {{ completedCount }} xong</nz-tag>
+          <nz-tag class="badge badge-error" *ngIf="errorCount > 0">❌ {{ errorCount }} lỗi</nz-tag>
+          <nz-tag class="badge badge-checking" *ngIf="uploadState === 'running'">⏳ Đang upload...</nz-tag>
+          <nz-tag class="badge badge-ok" *ngIf="uploadState === 'done'">🎉 Hoàn tất</nz-tag>
+        </div>
+      </div>
+
+      <!-- Overall status bar -->
+      <div class="overall-status" *ngIf="overallStatus">
+        <span class="status-dot" [class.pulse]="uploadState === 'running'"></span>
+        {{ overallStatus }}
+      </div>
+
+      <!-- Overall progress -->
+      <nz-progress
+        [nzPercent]="fileStates.length ? Math.round((completedCount + errorCount) / fileStates.length * 100) : 0"
+        [nzStatus]="uploadState === 'done' ? (errorCount > 0 ? 'exception' : 'success') : 'active'"
+        nzStrokeColor="{'0%':'#7c3aed','100%':'#3b82f6'}"
+        style="margin-bottom: 20px">
+      </nz-progress>
+
+      <!-- File list -->
+      <div class="file-queue">
+        <div class="file-item" *ngFor="let f of fileStates; let i = index"
+          [class.status-pending]="f.status === 'PENDING'"
+          [class.status-uploading]="f.status === 'UPLOADING'"
+          [class.status-done]="f.status === 'DONE'"
+          [class.status-error]="f.status === 'ERROR'">
+
+          <div class="file-num">{{ i + 1 }}</div>
+
+          <div class="file-info">
+            <div class="file-name">{{ f.fileName }}</div>
+            <div class="file-path">{{ f.filePath }}</div>
+
+            <!-- Progress bar (only when uploading) -->
+            <nz-progress *ngIf="f.status === 'UPLOADING'"
+              [nzPercent]="f.progress"
+              nzSize="small"
+              nzStatus="active"
+              nzStrokeColor="{'0%':'#7c3aed','100%':'#3b82f6'}"
+              style="margin-top: 6px">
+            </nz-progress>
+
+            <!-- Video ID link -->
+            <div class="video-link" *ngIf="f.videoId">
+              🎬 <a [href]="'https://studio.youtube.com/video/' + f.videoId + '/edit'" target="_blank">
+                Xem trên YouTube Studio
+              </a>
+            </div>
+
+            <!-- Error message -->
+            <div class="error-msg" *ngIf="f.error">⚠ {{ f.error }}</div>
+          </div>
+
+          <div class="file-status-badge">
+            <span *ngIf="f.status === 'PENDING'"   class="status-icon">⏸</span>
+            <span *ngIf="f.status === 'UPLOADING'" class="status-icon spin">↻</span>
+            <span *ngIf="f.status === 'DONE'"      class="status-icon done">✅</span>
+            <span *ngIf="f.status === 'ERROR'"     class="status-icon err">❌</span>
+            <span *ngIf="f.status === 'UPLOADING'" class="pct-label">{{ f.progress }}%</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Done actions -->
+      <div class="done-actions" *ngIf="uploadState === 'done'">
+        <button nz-button nzType="default" nzSize="large" (click)="reset()" id="btn-upload-reset">
+          🔄 Upload thêm
+        </button>
+      </div>
+    </nz-card>
+
+  </div>
+</div>

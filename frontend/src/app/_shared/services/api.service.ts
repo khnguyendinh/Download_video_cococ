@@ -17,6 +17,8 @@ export class ApiService {
 
   constructor(private http: HttpClient) {}
 
+  // ─── Download ───────────────────────────────────────────────
+
   getPlaylistInfo(url: string): Observable<PlaylistInfoResponse> {
     const params = new HttpParams().set('url', url);
     return this.http.get<PlaylistInfoResponse>(`${this.baseUrl}/api/playlist/info`, { params });
@@ -41,4 +43,38 @@ export class ApiService {
   getAllJobs(): Observable<DownloadJob[]> {
     return this.http.get<DownloadJob[]>(`${this.baseUrl}/api/download/jobs`);
   }
+
+  deleteJob(jobId: string): Observable<any> {
+    return this.http.delete<any>(`${this.baseUrl}/api/download/jobs/${jobId}`);
+  }
+
+  retryFailedBatch(jobIds: string[]): Observable<any> {
+    return this.http.post<any>(`${this.baseUrl}/api/download/retry-failed-batch`, { jobIds });
+  }
+
+  // ─── YouTube Upload ──────────────────────────────────────────
+
+  checkUploadAuthStatus(): Observable<{ credentialsAvailable: boolean; authenticated: boolean }> {
+    return this.http.get<any>(`${this.baseUrl}/api/upload/auth-status`);
+  }
+
+  getUploadAuthUrl(): Observable<{ url: string }> {
+    return this.http.get<any>(`${this.baseUrl}/api/upload/auth-url`);
+  }
+
+  scanFolder(path: string): Observable<{ files: VideoFileInfo[]; total: number; folder: string }> {
+    const params = new HttpParams().set('path', path);
+    return this.http.get<any>(`${this.baseUrl}/api/upload/scan-folder`, { params });
+  }
+
+  startUpload(payload: { playlistId: string; filePaths: string[] }): Observable<any> {
+    return this.http.post<any>(`${this.baseUrl}/api/upload/start`, payload);
+  }
 }
+
+export interface VideoFileInfo {
+  fileName: string;
+  filePath: string;
+  fileSize: number;
+}
+

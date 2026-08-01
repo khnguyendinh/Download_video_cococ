@@ -16,12 +16,17 @@ import { NzStatisticModule } from 'ng-zorro-antd/statistic';
 import { NzIconModule } from 'ng-zorro-antd/icon';
 import { NzMessageModule } from 'ng-zorro-antd/message';
 import { NzToolTipModule } from 'ng-zorro-antd/tooltip';
+import { NzModalModule } from 'ng-zorro-antd/modal';
+import { NzPopconfirmModule } from 'ng-zorro-antd/popconfirm';
+import { NzCheckboxModule } from 'ng-zorro-antd/checkbox';
 
 import { DownloaderComponent } from './downloader/downloader.component';
+import { UploadComponent } from './upload/upload.component';
+import { OAuthCallbackComponent } from './oauth-callback/oauth-callback.component';
 import { PagesRoutingModule } from './pages-routing.module';
 
 @NgModule({
-  declarations: [DownloaderComponent],
+  declarations: [DownloaderComponent, UploadComponent, OAuthCallbackComponent],
   imports: [
     CommonModule,
     ReactiveFormsModule,
@@ -41,6 +46,9 @@ import { PagesRoutingModule } from './pages-routing.module';
     NzIconModule,
     NzMessageModule,
     NzToolTipModule,
+    NzModalModule,
+    NzPopconfirmModule,
+    NzCheckboxModule,
   ],
 })
 export class PagesModule {}

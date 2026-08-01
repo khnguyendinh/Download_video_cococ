@@ -31,3 +31,13 @@ logging:
 ytdlp:
   path: yt-dlp
   # ffmpeg-path: C:/ffmpeg/bin/ffmpeg.exe  # Uncomment nếu cần chỉ định path ffmpeg
+
+# Downloader — file lưu lịch sử jobs
+downloader:
+  history-file: download-history.json
+
+# YouTube Upload configuration
+youtube:
+  credentials-file: src/main/resources/client_secret_375048557904-tudo99982g1lagunagi5q086g8tsuaqf.apps.googleusercontent.com.json
+  tokens-dir: tokens
+  redirect-uri: http://localhost:8080/api/upload/oauth2callback

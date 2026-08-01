@@ -56,7 +56,43 @@
 
 .page-sub { color: #64748b; font-size: 13px; margin: 4px 0 0; }
 
+// Tab Navigation (dùng chung cho cả downloader và upload)
+.page-tabs {
+  display: flex;
+  gap: 4px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 12px;
+  padding: 4px;
+  width: fit-content;
+  margin-top: 12px;
+}
+
+.tab-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #64748b;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  border: 1px solid transparent;
+
+  &:hover { color: #94a3b8; background: rgba(255,255,255,0.06); }
+
+  &.tab-active-force {
+    background: linear-gradient(135deg, rgba(255,0,64,0.15), rgba(124,58,237,0.15));
+    color: #fb7185;
+    border-color: rgba(255,0,64,0.25);
+  }
+  .tab-icon { font-size: 14px; }
+}
+
 .page-content { display: flex; flex-direction: column; gap: 20px; padding-bottom: 48px; }
+
 
 // Card header
 .card-header-row {
@@ -278,6 +314,21 @@
     min-width: 44px;
     text-align: right;
   }
+  .btn-retry-job {
+    background: linear-gradient(135deg, #7c3aed, #3b82f6) !important;
+    border: none !important;
+    color: #fff !important;
+    font-weight: 600;
+    border-radius: 8px !important;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    &:hover {
+      opacity: 0.85;
+      transform: scale(1.03);
+    }
+    transition: all 0.2s;
+  }
 }
 
 .expand-icon { color: #475569; font-size: 12px; transition: color 0.2s; }
@@ -464,4 +515,90 @@
   .table-row { grid-template-columns: 1fr; }
   .col-num { display: none; }
   .stats-row { grid-template-columns: 1fr 1fr; }
+}
+
+// ================================
+// Thời gian và nút xóa job
+// ================================
+.job-time-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.time-badge {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  transition: color 0.2s;
+
+  &.duration {
+    color: #7c3aed;
+    border-color: rgba(124, 58, 237, 0.3);
+    background: rgba(124, 58, 237, 0.08);
+  }
+}
+
+.btn-delete-job {
+  opacity: 0.6;
+  transition: opacity 0.2s, transform 0.2s;
+  border-radius: 6px;
+  margin-left: 4px;
+
+  &:hover:not([disabled]) {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+
+  &[disabled] {
+    cursor: not-allowed;
+    opacity: 0.2;
+  }
+}
+
+// Card "Thêm playlist mới" ở trạng thái running/done
+.add-more-card {
+  margin-bottom: 20px;
+  border: 1px dashed rgba(255, 255, 255, 0.15) !important;
+
+  .dark-input {
+    margin-bottom: 0;
+  }
+
+  .table-row {
+    display: block;
+    margin-bottom: 8px;
+    padding: 0;
+    background: none;
+    border: none;
+  }
+}
+
+// Nút Retry Failed Videos
+.btn-retry-all-failed {
+  background: linear-gradient(135deg, #f59e0b, #ef4444) !important;
+  border: none !important;
+  color: #fff !important;
+  font-weight: 700;
+  border-radius: 10px !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4);
+  transition: all 0.2s ease;
+
+  &:hover {
+    opacity: 0.9;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(239, 68, 68, 0.55);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
 }

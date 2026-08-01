@@ -125,6 +125,57 @@ public class DownloadController {
         return ResponseEntity.badRequest().body(Map.of("success", false, "message", "Không thể hủy job"));
     }
 
+    /**
+     * Xóa job khỏi lịch sử (và file JSON)
+     */
+    @DeleteMapping("/jobs/{jobId}")
+    public ResponseEntity<?> deleteJob(@PathVariable String jobId) {
+        boolean deleted = jobService.deleteJob(jobId);
+        if (deleted) return ResponseEntity.ok(Map.of("success", true, "message", "Đã xóa job"));
+        return ResponseEntity.badRequest().body(Map.of("success", false, "message", "Không thể xóa job (không tồn tại hoặc đang chạy)"));
+    }
+
+    /**
+     * Retry các video FAILED của nhiều jobs (chạy tuần tự)
+     */
+    @PostMapping("/retry-failed-batch")
+    public ResponseEntity<?> retryFailedBatch(@RequestBody RetryBatchRequest request) {
+        try {
+            if (request.getJobIds() == null || request.getJobIds().isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of("success", false, "message", "Danh sách job trống"));
+            }
+
+            List<Map<String, Object>> jobInfos = new ArrayList<>();
+            List<String> newJobIds = new ArrayList<>();
+
+            for (String originalJobId : request.getJobIds()) {
+                try {
+                    DownloadJob retryJob = jobService.createRetryJob(originalJobId);
+                    newJobIds.add(retryJob.getId());
+                    jobInfos.add(Map.of(
+                            "jobId", retryJob.getId(),
+                            "folderName", retryJob.getFolderName(),
+                            "totalRetryVideos", retryJob.getTotalVideos()
+                    ));
+                    log.info("Queued retry job {} for {} failed videos", retryJob.getId(), retryJob.getTotalVideos());
+                } catch (Exception e) {
+                    log.warn("No failed videos for job {}: {}", originalJobId, e.getMessage());
+                }
+            }
+
+            if (newJobIds.isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of("success", false, "message", "Không có video lỗi nào cần retry"));
+            }
+
+            jobService.executeRetryJobsSequentially(newJobIds);
+            return ResponseEntity.ok(Map.of("success", true, "jobs", jobInfos));
+
+        } catch (Exception e) {
+            log.error("Error starting retry batch", e);
+            return ResponseEntity.badRequest().body(Map.of("success", false, "message", e.getMessage()));
+        }
+    }
+
     // DTO cho batch request
     @Data
     public static class BatchRequest {
@@ -136,5 +187,11 @@ public class DownloadController {
             private String playlistUrl;
             private String folderName;
         }
+    }
+
+    // DTO cho retry batch request
+    @Data
+    public static class RetryBatchRequest {
+        private List<String> jobIds;
     }
 }

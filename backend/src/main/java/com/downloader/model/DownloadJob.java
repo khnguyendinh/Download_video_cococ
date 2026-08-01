@@ -1,5 +1,6 @@
 package com.downloader.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.Data;
 import lombok.Builder;
 import lombok.AllArgsConstructor;
@@ -14,6 +15,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class DownloadJob {
 
     private String id;
@@ -28,6 +30,9 @@ public class DownloadJob {
     private double currentVideoProgress;
     private LocalDateTime startedAt;
     private LocalDateTime finishedAt;
+
+    /** Thời gian tải tính bằng giây (finishedAt - startedAt) */
+    private Long durationSeconds;
 
     @Builder.Default
     private List<VideoInfo> videos = new CopyOnWriteArrayList<>();
@@ -49,5 +54,14 @@ public class DownloadJob {
     public int getProgressPercent() {
         if (totalVideos == 0) return 0;
         return (int) ((completedVideos * 100.0) / totalVideos);
+    }
+
+    /**
+     * Tính và lưu durationSeconds từ startedAt đến finishedAt
+     */
+    public void calculateDuration() {
+        if (startedAt != null && finishedAt != null) {
+            this.durationSeconds = java.time.Duration.between(startedAt, finishedAt).getSeconds();
+        }
     }
 }

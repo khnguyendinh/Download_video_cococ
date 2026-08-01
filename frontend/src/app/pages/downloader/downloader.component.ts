@@ -2,6 +2,7 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 import { FormArray, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Subscription } from 'rxjs';
 import { NzMessageService } from 'ng-zorro-antd/message';
+import { NzModalService } from 'ng-zorro-antd/modal';
 
 import { ApiService } from '../../_shared/services/api.service';
 import { SseService } from '../../_shared/services/sse.service';
@@ -14,6 +15,7 @@ export interface JobState {
   jobId: string;
   folderName: string;
   playlistUrl: string;
+  savePath: string;
   status: JobStatus;
   totalVideos: number;
   completedVideos: number;
@@ -27,6 +29,11 @@ export interface JobState {
   doneData?: DoneEvent;
   eventSource?: EventSource;
   subs: Subscription[];
+  // Thông tin thời gian
+  startedAt?: string;
+  finishedAt?: string;
+  durationSeconds?: number;
+  isHistorical?: boolean; // job từ lịch sử (load lại khi mở app)
 }
 
 @Component({
@@ -38,12 +45,14 @@ export class DownloaderComponent implements OnInit, OnDestroy {
   form!: FormGroup;
   appState: 'input' | 'running' | 'done' = 'input';
   jobStates: JobState[] = [];
+  isLoadingHistory = false;
 
   constructor(
     private fb: FormBuilder,
     private api: ApiService,
     private sse: SseService,
-    private message: NzMessageService
+    private message: NzMessageService,
+    private modal: NzModalService
   ) {}
 
   ngOnInit(): void {
@@ -51,10 +60,76 @@ export class DownloaderComponent implements OnInit, OnDestroy {
       savePath: ['', Validators.required],
       items: this.fb.array([this.createItem()]),
     });
+
+    // Load lịch sử jobs cũ từ backend
+    this.loadHistory();
   }
 
   ngOnDestroy(): void {
     this.jobStates.forEach((j) => this.cleanupJob(j));
+  }
+
+  // ========================
+  // Load lịch sử từ server
+  // ========================
+  loadHistory(): void {
+    this.isLoadingHistory = true;
+    this.api.getAllJobs().subscribe({
+      next: (jobs: DownloadJob[]) => {
+        this.isLoadingHistory = false;
+        if (!jobs || jobs.length === 0) return;
+
+        // Chuyển DownloadJob[] → JobState[]
+        this.jobStates = jobs.map((j) => this.jobToState(j, true));
+
+        // Job nào đang DOWNLOADING/FETCHING_INFO thì kết nối SSE (nếu server vẫn đang chạy)
+        this.jobStates.forEach((js) => {
+          if (js.status === 'DOWNLOADING' || js.status === 'FETCHING_INFO' || js.status === 'PENDING') {
+            this.connectSse(js);
+          }
+        });
+
+        // Xác định appState
+        const hasActive = this.jobStates.some(
+          (j) => j.status === 'DOWNLOADING' || j.status === 'FETCHING_INFO' || j.status === 'PENDING'
+        );
+        const hasAny = this.jobStates.length > 0;
+
+        if (hasActive) {
+          this.appState = 'running';
+        } else if (hasAny) {
+          this.appState = 'done';
+        }
+      },
+      error: () => {
+        this.isLoadingHistory = false;
+      },
+    });
+  }
+
+  /** Chuyển DownloadJob (từ API) sang JobState (UI) */
+  private jobToState(j: DownloadJob, isHistorical = false): JobState {
+    return {
+      jobId: j.id,
+      folderName: j.folderName,
+      playlistUrl: j.playlistUrl,
+      savePath: j.savePath || '',
+      status: j.status as JobStatus,
+      totalVideos: j.totalVideos || 0,
+      completedVideos: j.completedVideos || 0,
+      failedVideos: j.failedVideos || 0,
+      progressPercent: j.progressPercent || 0,
+      currentVideoTitle: j.currentVideoTitle || '',
+      currentVideoProgress: j.currentVideoProgress || 0,
+      videos: j.videos || [],
+      logs: j.logs || [],
+      expanded: false,
+      startedAt: j.startedAt,
+      finishedAt: j.finishedAt,
+      durationSeconds: j.durationSeconds,
+      isHistorical,
+      subs: [],
+    };
   }
 
   // ========================
@@ -130,21 +205,21 @@ export class DownloaderComponent implements OnInit, OnDestroy {
     }));
 
     this.appState = 'running';
-    this.jobStates = [];
 
     this.api.batchDownload({ savePath, items: itemList }).subscribe({
       next: (res) => {
         if (!res.success) {
           this.message.error(res.message || 'Lỗi khởi động');
-          this.appState = 'input';
+          this.appState = this.jobStates.length > 0 ? 'done' : 'input';
           return;
         }
 
-        // Tạo jobState cho từng job trả về
-        this.jobStates = res.jobs.map((j: any) => ({
+        // Tạo jobState cho từng job trả về và THÊM VÀO CUỐI danh sách hiện tại
+        const newStates: JobState[] = res.jobs.map((j: any) => ({
           jobId: j.jobId,
           folderName: j.folderName,
           playlistUrl: j.playlistUrl,
+          savePath,
           status: 'PENDING' as JobStatus,
           totalVideos: 0,
           completedVideos: 0,
@@ -155,16 +230,115 @@ export class DownloaderComponent implements OnInit, OnDestroy {
           videos: [],
           logs: [`🚀 Job đã tạo cho folder: ${j.folderName}`],
           expanded: false,
+          isHistorical: false,
           subs: [],
         }));
 
-        // Kết nối SSE từng job
-        this.jobStates.forEach((js) => this.connectSse(js));
+        this.jobStates = [...this.jobStates, ...newStates];
+
+        // Kết nối SSE từng job mới
+        newStates.forEach((js) => this.connectSse(js));
+
+        // Reset form
+        this.form.reset();
+        this.items.clear();
+        this.items.push(this.createItem());
 
         this.message.success(`Đã khởi động ${res.jobs.length} playlist — chạy tuần tự`);
       },
       error: (err) => {
-        this.appState = 'input';
+        this.appState = this.jobStates.length > 0 ? 'done' : 'input';
+        this.message.error(err?.error?.message || 'Lỗi kết nối server');
+      },
+    });
+  }
+
+  // ========================
+  // Xóa job
+  // ========================
+  confirmDeleteJob(js: JobState): void {
+    this.modal.confirm({
+      nzTitle: `Xóa job "${js.folderName}"?`,
+      nzContent: 'Job sẽ bị xóa khỏi lịch sử và không thể khôi phục.',
+      nzOkText: 'Xóa',
+      nzOkDanger: true,
+      nzCancelText: 'Hủy',
+      nzOnOk: () => this.deleteJob(js),
+    });
+  }
+
+  deleteJob(js: JobState): void {
+    this.api.deleteJob(js.jobId).subscribe({
+      next: () => {
+        this.cleanupJob(js);
+        this.jobStates = this.jobStates.filter((j) => j.jobId !== js.jobId);
+        this.message.success(`Đã xóa job: ${js.folderName}`);
+
+        if (this.jobStates.length === 0) {
+          this.appState = 'input';
+        }
+      },
+      error: () => {
+        this.message.error('Không thể xóa job đang chạy');
+      },
+    });
+  }
+
+  // ========================
+  // Retry job bị FAILED/CANCELLED
+  // ========================
+  retryJob(js: JobState): void {
+    if (!js.savePath) {
+      this.message.error('Không có đường dẫn lưu — không thể tải lại');
+      return;
+    }
+
+    this.message.loading(`Đang khởi động lại: ${js.folderName}...`, { nzDuration: 1500 });
+
+    this.api.batchDownload({
+      savePath: js.savePath,
+      items: [{ playlistUrl: js.playlistUrl, folderName: js.folderName }],
+    }).subscribe({
+      next: (res) => {
+        if (!res.success || !res.jobs?.length) {
+          this.message.error(res.message || 'Lỗi khi tạo lại job');
+          return;
+        }
+
+        const newJob = res.jobs[0];
+        const newState: JobState = {
+          jobId: newJob.jobId,
+          folderName: newJob.folderName,
+          playlistUrl: newJob.playlistUrl || js.playlistUrl,
+          savePath: js.savePath,
+          status: 'PENDING',
+          totalVideos: 0,
+          completedVideos: 0,
+          failedVideos: 0,
+          progressPercent: 0,
+          currentVideoTitle: '',
+          currentVideoProgress: 0,
+          videos: [],
+          logs: [`🔄 Tải lại từ job FAILED: ${js.folderName}`],
+          expanded: true,
+          isHistorical: false,
+          subs: [],
+        };
+
+        // Thay thế job cũ bằng job mới tại cùng vị trí
+        const idx = this.jobStates.findIndex((j) => j.jobId === js.jobId);
+        if (idx >= 0) {
+          this.cleanupJob(this.jobStates[idx]);
+          this.jobStates[idx] = newState;
+        } else {
+          this.jobStates.push(newState);
+        }
+
+        this.appState = 'running';
+        this.connectSse(newState);
+        this.message.success(`✅ Đã khởi động lại: ${js.folderName}`);
+      },
+      error: (err) => {
         this.message.error(err?.error?.message || 'Lỗi kết nối server');
       },
     });
@@ -226,6 +400,14 @@ export class DownloaderComponent implements OnInit, OnDestroy {
       js.status = d.success ? 'COMPLETED' : 'FAILED';
       js.progressPercent = 100;
       es.close();
+      // Reload lại thông tin job để lấy finishedAt, durationSeconds
+      this.api.getJobStatus(js.jobId).subscribe({
+        next: (job) => {
+          js.finishedAt = job.finishedAt;
+          js.startedAt = job.startedAt;
+          js.durationSeconds = job.durationSeconds;
+        },
+      });
       this.checkAllDone();
     };
 
@@ -285,8 +467,118 @@ export class DownloaderComponent implements OnInit, OnDestroy {
       FAILED: 'error', SKIPPED: 'warning' } as any)[s] || 'default';
   }
 
+  formatDuration(seconds: number | undefined): string {
+    if (!seconds) return '--';
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    if (h > 0) return `${h}g ${m}p ${s}s`;
+    if (m > 0) return `${m}p ${s}s`;
+    return `${s}s`;
+  }
+
+  formatDateTime(dt: string | undefined): string {
+    if (!dt) return '--';
+    try {
+      const d = new Date(dt);
+      return d.toLocaleString('vi-VN', {
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit', second: '2-digit'
+      });
+    } catch { return dt; }
+  }
+
   get totalCompleted(): number { return this.jobStates.filter(j => j.status === 'COMPLETED').length; }
   get totalFailed(): number { return this.jobStates.filter(j => j.status === 'FAILED').length; }
   get totalRunning(): number { return this.jobStates.filter(j => j.status === 'DOWNLOADING' || j.status === 'FETCHING_INFO').length; }
   get totalPending(): number { return this.jobStates.filter(j => j.status === 'PENDING').length; }
+
+  /** Tổng số video bị lỗi trong tất cả jobs (để hiện nút Retry Failed) */
+  get totalFailedVideosCount(): number {
+    return this.jobStates.reduce((sum, j) => sum + (j.failedVideos || 0), 0);
+  }
+
+  /** Retry tất cả video FAILED trong các jobs đã xong */
+  retryAllFailedVideos(): void {
+    const jobsWithFailed = this.jobStates.filter(j => (j.failedVideos || 0) > 0);
+    if (!jobsWithFailed.length) {
+      this.message.warning('Không có video lỗi nào cần retry');
+      return;
+    }
+
+    const jobIds = jobsWithFailed.map(j => j.jobId);
+    const totalFailed = jobsWithFailed.reduce((sum, j) => sum + j.failedVideos, 0);
+
+    this.message.loading(`Đang tạo retry jobs cho ${totalFailed} video lỗi...`, { nzDuration: 2000 });
+
+    this.api.retryFailedBatch(jobIds).subscribe({
+      next: (res) => {
+        if (!res.success || !res.jobs?.length) {
+          this.message.error(res.message || 'Lỗi khi tạo retry jobs');
+          return;
+        }
+
+        // Reset failedVideos của job gốc về 0 trước khi thay thế
+        jobsWithFailed.forEach(j => { j.failedVideos = 0; });
+
+        // Thay thế job gốc tại cùng vị trí (không thêm dòng mới)
+        res.jobs.forEach((j: any) => {
+          // Tìm job gốc ứng với retry này (so khớp theo folderName, bỏ qua suffix [RETRY])
+          const origJob = jobsWithFailed.find(orig =>
+            orig.folderName.replace(/ \[RETRY\]/g, '') === j.folderName
+          );
+          if (!origJob) return;
+
+          const origIdx = this.jobStates.findIndex(s => s.jobId === origJob.jobId);
+          if (origIdx < 0) return;
+
+          // Cleanup SSE cũ để tránh rỏ kết nối
+          this.cleanupJob(this.jobStates[origIdx]);
+
+          const newState: JobState = {
+            jobId: j.jobId,
+            folderName: j.folderName,           // Giữ nguyên tên gốc, không thêm [RETRY]
+            playlistUrl: origJob.playlistUrl,
+            savePath: origJob.savePath,
+            status: 'PENDING' as JobStatus,
+            totalVideos: j.totalRetryVideos || 0,
+            completedVideos: 0,
+            failedVideos: 0,
+            progressPercent: 0,
+            currentVideoTitle: '',
+            currentVideoProgress: 0,
+            videos: [],
+            logs: [`🔄 Retry ${j.totalRetryVideos} video lỗi`],
+            expanded: true,
+            isHistorical: false,
+            subs: [],
+          };
+
+          this.jobStates[origIdx] = newState;
+          this.connectSse(newState);
+        });
+
+        this.jobStates = [...this.jobStates]; // Trigger change detection
+        this.appState = 'running';
+        this.message.success(`✅ Đã khởi động retry ${totalFailed} video lỗi từ ${res.jobs.length} playlist`);
+      },
+      error: (err) => {
+        this.message.error(err?.error?.message || 'Lỗi kết nối server');
+      },
+    });
+  }
+
+  /** Sort video list: FAILED lên đầu, tiếp theo DOWNLOADING, rồi PENDING, cuối cùng COMPLETED/SKIPPED */
+  getSortedVideos(videos: VideoInfo[]): VideoInfo[] {
+    const order: Record<string, number> = {
+      FAILED: 0,
+      DOWNLOADING: 1,
+      PENDING: 2,
+      SKIPPED: 3,
+      COMPLETED: 4,
+    };
+    return [...videos].sort((a, b) =>
+      (order[a.status] ?? 5) - (order[b.status] ?? 5)
+    );
+  }
 }

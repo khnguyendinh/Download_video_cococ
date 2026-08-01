@@ -1,0 +1,62 @@
+<div class="callback-page">
+
+  <!-- LOADING -->
+  <div class="callback-card" *ngIf="state === 'loading'">
+    <div class="spinner-ring"></div>
+    <h1 class="card-title loading">Đang xử lý...</h1>
+    <p class="card-sub">Vui lòng chờ trong giây lát</p>
+  </div>
+
+  <!-- SUCCESS -->
+  <div class="callback-card success-card" *ngIf="state === 'success'">
+    <div class="icon-wrap success-icon">
+      <svg viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle class="check-circle" cx="26" cy="26" r="24" stroke="#22c55e" stroke-width="3"/>
+        <path class="check-mark" d="M14 26.5L22 34.5L38 18" stroke="#22c55e" stroke-width="3"
+              stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+
+    <h1 class="card-title success">Đăng nhập thành công!</h1>
+    <p class="card-sub">Tài khoản Google đã được kết nối.</p>
+
+    <div class="countdown-wrap">
+      <div class="countdown-ring">
+        <svg viewBox="0 0 48 48">
+          <circle cx="24" cy="24" r="20" stroke="rgba(255,255,255,0.1)" stroke-width="3" fill="none"/>
+          <circle cx="24" cy="24" r="20" stroke="#22c55e" stroke-width="3" fill="none"
+                  stroke-dasharray="125.6" [attr.stroke-dashoffset]="125.6 * (1 - countdown/3)"
+                  stroke-linecap="round" transform="rotate(-90 24 24)"/>
+        </svg>
+        <span class="countdown-num">{{ countdown }}</span>
+      </div>
+      <span class="countdown-text">Tab sẽ tự đóng sau {{ countdown }}s</span>
+    </div>
+
+    <div class="hint-text">
+      Quay lại tab <strong>YouTube Upload</strong> để bắt đầu upload
+    </div>
+  </div>
+
+  <!-- ERROR -->
+  <div class="callback-card error-card" *ngIf="state === 'error'">
+    <div class="icon-wrap error-icon">
+      <svg viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="26" cy="26" r="24" stroke="#ef4444" stroke-width="3"/>
+        <path d="M17 17L35 35M35 17L17 35" stroke="#ef4444" stroke-width="3" stroke-linecap="round"/>
+      </svg>
+    </div>
+
+    <h1 class="card-title error">Xác thực thất bại</h1>
+    <p class="card-sub">{{ errorMsg }}</p>
+
+    <button class="btn-back" (click)="goToUpload()" id="btn-back-to-upload">
+      ← Quay lại trang Upload
+    </button>
+  </div>
+
+  <!-- Background particles -->
+  <div class="bg-orb orb-1"></div>
+  <div class="bg-orb orb-2"></div>
+  <div class="bg-orb orb-3"></div>
+</div>

@@ -27,3 +27,9 @@ Thumbs.db
 # ===== Logs =====
 *.log
 npm-debug.log*
+
+# ===== Google OAuth / YouTube Credentials (SECRET — không đưa lên git) =====
+backend/credentials.json
+backend/src/main/resources/client_secret*.json
+backend/tokens/
+tokens/

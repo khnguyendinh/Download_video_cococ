@@ -14,6 +14,7 @@ export interface DownloadJob {
   progressPercent: number;
   startedAt?: string;
   finishedAt?: string;
+  durationSeconds?: number;
   videos: VideoInfo[];
   logs: string[];
 }
