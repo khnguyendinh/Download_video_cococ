@@ -86,6 +86,21 @@ public class UploadController {
     }
 
     // ─────────────────────────────────────────────────────
+    // History
+    // ─────────────────────────────────────────────────────
+
+    @GetMapping("/history")
+    public ResponseEntity<?> getHistory() {
+        return ResponseEntity.ok(uploadService.getSessions());
+    }
+
+    @DeleteMapping("/history/{sessionId}")
+    public ResponseEntity<?> deleteHistory(@PathVariable String sessionId) {
+        uploadService.removeSession(sessionId);
+        return ResponseEntity.ok(Map.of("success", true, "message", "Đã xóa"));
+    }
+
+    // ─────────────────────────────────────────────────────
     // Upload
     // ─────────────────────────────────────────────────────
 

@@ -31,9 +31,15 @@ public class YouTubeUploadService {
 
     private final YouTubeAuthService authService;
     private final ObjectMapper objectMapper;
+    private final UploadPersistenceService uploadPersistenceService;
 
-    private final Map<String, UploadSession> sessions = new ConcurrentHashMap<>();
+    private Map<String, UploadSession> sessions = new ConcurrentHashMap<>();
     private final ExecutorService executor = Executors.newCachedThreadPool();
+
+    @jakarta.annotation.PostConstruct
+    public void init() {
+        this.sessions = new ConcurrentHashMap<>(uploadPersistenceService.loadAll());
+    }
 
     // ─────────────────────────────────────────────────────
     // Public API
@@ -48,8 +54,17 @@ public class YouTubeUploadService {
         session.setTotalFiles(filePaths.size());
         session.setStatus("PENDING");
         sessions.put(session.getSessionId(), session);
+        uploadPersistenceService.saveAll(sessions);
         log.info("[Upload] Tạo session {} với {} file(s)", session.getSessionId(), filePaths.size());
         return session;
+    }
+
+    public List<UploadSession> getSessions() {
+        return new ArrayList<>(sessions.values());
+    }
+
+    public void removeSession(String sessionId) {
+        uploadPersistenceService.deleteSession(sessionId, sessions);
     }
 
     /**
@@ -93,6 +108,14 @@ public class YouTubeUploadService {
         try {
             YouTube youtube = authService.getYouTubeClient();
 
+            // Lấy danh sách title đã có trong playlist để tránh trùng lặp
+            Set<String> existingTitles = new HashSet<>();
+            if (!session.getPlaylistId().isBlank()) {
+                sendEvent(session, "INFO", "Đang kiểm tra danh sách video đã có trong playlist...");
+                existingTitles = getPlaylistVideoTitles(youtube, session.getPlaylistId());
+                sendEvent(session, "INFO", "Tìm thấy " + existingTitles.size() + " video trong playlist.");
+            }
+
             for (String rawPath : session.getFilePaths()) {
                 String filePath = rawPath.trim();
                 if (filePath.isEmpty()) continue;
@@ -100,22 +123,43 @@ public class YouTubeUploadService {
                 File file = new File(filePath);
                 session.setCurrentFile(file.getName());
                 session.setCurrentFileProgress(0);
-                sendEvent(session, "FILE_START", "Bắt đầu upload: " + file.getName());
+                
+                String title = file.getName().replaceAll("\\.[^.]+$", ""); // bỏ đuôi file (.mp4)
+                title = title.replaceAll("\\.f\\d+$", ""); // bỏ đuôi format của yt-dlp (VD: .f399)
+                title = title.replaceAll("[<>|｜]", "-"); // YouTube không cho phép dấu < >
+                title = title.trim();
+                if (title.length() > 95) {
+                    title = title.substring(0, 95).trim();
+                }
 
                 UploadResult result = new UploadResult();
                 result.setFilePath(filePath);
                 result.setFileName(file.getName());
 
+                // KIỂM TRA TRÙNG LẶP
+                if (existingTitles.contains(title.trim())) {
+                    sendEvent(session, "FILE_START", "Bỏ qua: " + file.getName() + " (Đã tồn tại trong playlist)");
+                    result.setStatus("SUCCESS");
+                    result.setVideoId("EXISTING"); // Mark as existing
+                    session.setCompletedFiles(session.getCompletedFiles() + 1);
+                    session.getResults().add(result);
+                    uploadPersistenceService.saveAll(sessions);
+                    continue;
+                }
+
+                sendEvent(session, "FILE_START", "Bắt đầu upload: " + file.getName());
+
                 try {
                     if (!file.exists()) throw new FileNotFoundException("File không tồn tại: " + filePath);
 
-                    String videoId = uploadFile(youtube, file, session);
+                    String videoId = uploadFile(youtube, file, session, title);
                     result.setVideoId(videoId);
                     result.setStatus("SUCCESS");
 
                     if (!session.getPlaylistId().isBlank()) {
                         addToPlaylist(youtube, videoId, session.getPlaylistId());
                         log.info("[Upload] Đã thêm video {} vào playlist {}", videoId, session.getPlaylistId());
+                        existingTitles.add(title.trim()); // Thêm vào cache để tránh upload đúp trong cùng 1 session
                     }
 
                     session.setCompletedFiles(session.getCompletedFiles() + 1);
@@ -130,17 +174,20 @@ public class YouTubeUploadService {
                 }
 
                 session.getResults().add(result);
+                uploadPersistenceService.saveAll(sessions);
             }
 
             session.setStatus("DONE");
             session.setFinishedAt(LocalDateTime.now());
             saveUploadStatus(session); // Ghi upload_status.json vào folder
+            uploadPersistenceService.saveAll(sessions);
             sendEvent(session, "ALL_DONE", "Upload hoàn tất! " + session.getCompletedFiles() + "/" + session.getTotalFiles() + " file thành công.");
 
         } catch (Exception e) {
             log.error("[Upload] Lỗi session upload", e);
             session.setStatus("FAILED");
             session.setFinishedAt(LocalDateTime.now());
+            uploadPersistenceService.saveAll(sessions);
             sendEvent(session, "ERROR", "Lỗi: " + e.getMessage());
         } finally {
             if (session.getEmitter() != null) {
@@ -240,7 +287,31 @@ public class YouTubeUploadService {
         }
     }
 
-    private String uploadFile(YouTube youtube, File file, UploadSession session) throws Exception {
+    private Set<String> getPlaylistVideoTitles(YouTube youtube, String playlistId) {
+        Set<String> titles = new HashSet<>();
+        if (playlistId == null || playlistId.isBlank()) return titles;
+        try {
+            String nextPageToken = null;
+            do {
+                PlaylistItemListResponse response = youtube.playlistItems()
+                        .list(Collections.singletonList("snippet"))
+                        .setPlaylistId(playlistId)
+                        .setMaxResults(50L)
+                        .setPageToken(nextPageToken)
+                        .execute();
+                
+                for (PlaylistItem item : response.getItems()) {
+                    titles.add(item.getSnippet().getTitle().trim());
+                }
+                nextPageToken = response.getNextPageToken();
+            } while (nextPageToken != null);
+        } catch (Exception e) {
+            log.warn("[Upload] Lỗi khi lấy danh sách video từ playlist {}: {}", playlistId, e.getMessage());
+        }
+        return titles;
+    }
+
+    private String uploadFile(YouTube youtube, File file, UploadSession session, String title) throws Exception {
         // Metadata
         Video video = new Video();
 
@@ -249,7 +320,6 @@ public class YouTubeUploadService {
         video.setStatus(status);
 
         VideoSnippet snippet = new VideoSnippet();
-        String title = file.getName().replaceAll("\\.[^.]+$", ""); // bỏ đuôi file
         snippet.setTitle(title);
         snippet.setDescription("Uploaded by YouTube Playlist Uploader");
         video.setSnippet(snippet);
@@ -305,6 +375,10 @@ public class YouTubeUploadService {
     // ─────────────────────────────────────────────────────
 
     private void sendEvent(UploadSession session, String eventName, String message) {
+        if (message != null && !message.isEmpty()) {
+            session.addLog(message);
+        }
+        
         if (session.getEmitter() == null) return;
         try {
             Map<String, Object> data = new LinkedHashMap<>();
@@ -317,6 +391,7 @@ public class YouTubeUploadService {
             data.put("currentFile", session.getCurrentFile());
             data.put("currentFileProgress", Math.round(session.getCurrentFileProgress() * 10.0) / 10.0);
             data.put("results", session.getResults());
+            data.put("logs", session.getLogs());
 
             String json = objectMapper.writeValueAsString(data);
             session.getEmitter().send(SseEmitter.event().name(eventName).data(json));

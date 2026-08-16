@@ -28,8 +28,18 @@ public class UploadSession {
     private LocalDateTime startedAt;
     private LocalDateTime finishedAt;
 
+    private List<String> logs = new java.util.concurrent.CopyOnWriteArrayList<>();
+
     // Transient: không serialize SSE emitter
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private transient SseEmitter emitter;
+
+    public void addLog(String message) {
+        logs.add("[" + LocalDateTime.now().toString().substring(11, 19) + "] " + message);
+        if (logs.size() > 500) {
+            logs.remove(0);
+        }
+    }
 
     @Data
     public static class UploadResult {
