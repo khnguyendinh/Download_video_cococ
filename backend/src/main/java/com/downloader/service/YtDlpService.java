@@ -36,8 +36,12 @@ public class YtDlpService {
         command.add("--flat-playlist");
         command.add("--print");
         // Thêm playlist_title vào đầu mỗi dòng
-        command.add("%(playlist_title)s|%(id)s|%(title)s|%(duration_string)s|%(webpage_url)s");
+        command.add("%(playlist_title)s__SEP__%(id)s__SEP__%(title)s__SEP__%(duration_string)s__SEP__%(webpage_url)s");
         command.add("--no-warnings");
+        
+        command.add("--js-runtimes");
+        command.add("node");
+        
         command.add(playlistUrl);
 
         ProcessBuilder pb = new ProcessBuilder(command);
@@ -56,7 +60,7 @@ public class YtDlpService {
                 line = line.trim();
                 if (line.isEmpty()) continue;
                 // parts: [0]=playlistTitle, [1]=id, [2]=title, [3]=duration, [4]=url
-                String[] parts = line.split("\\|", 5);
+                String[] parts = line.split("__SEP__", 5);
                 if (parts.length >= 3) {
                     // Lấy tên playlist từ video đầu tiên
                     if (playlistTitle.isEmpty() && parts[0] != null && !parts[0].equals("NA")) {
@@ -222,6 +226,9 @@ public class YtDlpService {
         // Skip nếu file đã tồn tại trong folder (không tải lại)
         command.add("--no-overwrites");
         command.add("--no-continue");
+
+        command.add("--js-runtimes");
+        command.add("node");
 
         command.add("--progress");
         command.add("--newline");

@@ -239,10 +239,18 @@ export class DownloaderComponent implements OnInit, OnDestroy {
         // Kết nối SSE từng job mới
         newStates.forEach((js) => this.connectSse(js));
 
-        // Reset form
-        this.form.reset();
-        this.items.clear();
-        this.items.push(this.createItem());
+        // Giữ lại savePath để người dùng không phải nhập lại
+        const currentSavePath = this.form.get('savePath')?.value;
+
+        // Xóa các dòng thêm, chỉ giữ lại 1 dòng
+        while (this.items.length > 1) {
+          this.items.removeAt(this.items.length - 1);
+        }
+
+        // Reset form về trạng thái trống, nhưng giữ lại savePath
+        this.form.reset({
+          savePath: currentSavePath
+        });
 
         this.message.success(`Đã khởi động ${res.jobs.length} playlist — chạy tuần tự`);
       },
@@ -465,6 +473,11 @@ export class DownloaderComponent implements OnInit, OnDestroy {
   getVideoStatusColor(s: string): string {
     return ({ PENDING: 'default', DOWNLOADING: 'processing', COMPLETED: 'success',
       FAILED: 'error', SKIPPED: 'warning' } as any)[s] || 'default';
+  }
+
+  getVideoStatusText(s: string): string {
+    return ({ PENDING: 'Đang chờ', DOWNLOADING: 'Đang tải', COMPLETED: 'Download hoàn thành',
+      FAILED: 'Lỗi tải video', SKIPPED: 'Đã tồn tại file rồi nhé' } as any)[s] || s;
   }
 
   formatDuration(seconds: number | undefined): string {

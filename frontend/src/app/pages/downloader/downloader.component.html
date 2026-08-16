@@ -62,7 +62,7 @@
             <!-- Rows -->
             <div formArrayName="items">
               <div class="table-row"
-                   *ngFor="let item of items.controls; let i = index; trackBy: trackByIndex"
+                   *ngFor="let item of items.controls; let i = index"
                    [formGroupName]="i">
                 <div class="col-num">
                   <span class="row-num">{{ i + 1 }}</span>
@@ -160,7 +160,7 @@
             </nz-form-control>
           </nz-form-item>
           <div formArrayName="items">
-            <div class="table-row" *ngFor="let item of items.controls; let i = index; trackBy: trackByIndex" [formGroupName]="i">
+            <div class="table-row" *ngFor="let item of items.controls; let i = index" [formGroupName]="i">
               <input nz-input [id]="'url_more_' + i" formControlName="playlistUrl"
                 placeholder="YouTube Playlist URL" class="dark-input" style="margin-bottom:6px" />
               <input nz-input [id]="'folder_more_' + i" formControlName="folderName"
@@ -304,7 +304,8 @@
                   [class.vi-dl]="v.status === 'DOWNLOADING'">
                   <span class="vi-idx">{{ v.index }}</span>
                   <span class="vi-title" [title]="v.title">{{ v.title }}</span>
-                  <nz-tag [nzColor]="getVideoStatusColor(v.status)" class="vi-tag">
+                  <nz-tag [nzColor]="getVideoStatusColor(v.status)" class="vi-tag"
+                          nz-tooltip [nzTooltipTitle]="getVideoStatusText(v.status)">
                     {{ v.status === 'COMPLETED' ? '✅' : v.status === 'FAILED' ? '❌' :
                        v.status === 'DOWNLOADING' ? '⬇' : v.status === 'SKIPPED' ? '⏭' : '⏳' }}
                   </nz-tag>
