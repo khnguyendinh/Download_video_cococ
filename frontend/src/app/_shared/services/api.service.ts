@@ -70,6 +70,14 @@ export class ApiService {
   startUpload(payload: { playlistId: string; filePaths: string[] }): Observable<any> {
     return this.http.post<any>(`${this.baseUrl}/api/upload/start`, payload);
   }
+
+  getUploadHistory(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.baseUrl}/api/upload/history`);
+  }
+
+  deleteUploadHistory(sessionId: string): Observable<any> {
+    return this.http.delete<any>(`${this.baseUrl}/api/upload/history/${sessionId}`);
+  }
 }
 
 export interface VideoFileInfo {

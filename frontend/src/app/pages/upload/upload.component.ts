@@ -50,6 +50,9 @@ export class UploadComponent implements OnInit, OnDestroy {
   overallStatus = '';
   sessionId = '';
 
+  // History
+  historySessions: any[] = [];
+
   private eventSource?: EventSource;
   private authMessageListener?: (e: MessageEvent) => void;
 
@@ -62,6 +65,17 @@ export class UploadComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.checkAuth();
     this.listenForAuthCallback();
+    this.loadHistory();
+  }
+
+  loadHistory(): void {
+    this.api.getUploadHistory().subscribe({
+      next: (res) => {
+        // Sắp xếp lịch sử mới nhất lên đầu
+        this.historySessions = res.sort((a, b) => new Date(b.startedAt || b.finishedAt || 0).getTime() - new Date(a.startedAt || a.finishedAt || 0).getTime());
+      },
+      error: () => {}
+    });
   }
 
   ngOnDestroy(): void {
@@ -198,7 +212,11 @@ export class UploadComponent implements OnInit, OnDestroy {
   }
 
   toggleAll(checked: boolean): void {
-    this.scannedFiles.forEach(f => f.selected = checked);
+    this.scannedFiles.forEach(f => {
+      if (f.previousStatus !== 'SUCCESS') {
+        f.selected = checked;
+      }
+    });
   }
 
   get canStart(): boolean {
@@ -212,6 +230,77 @@ export class UploadComponent implements OnInit, OnDestroy {
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
     if (bytes < 1024 * 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + ' MB';
     return (bytes / 1024 / 1024 / 1024).toFixed(2) + ' GB';
+  }
+
+  // ─────────────────────────────────────────────────────
+  // History Actions
+  // ─────────────────────────────────────────────────────
+
+  retryHistoryJob(job: any): void {
+    // 1. Tự động điền folder path
+    if (job.results && job.results.length > 0) {
+      // Lấy đường dẫn thư mục từ file đầu tiên
+      const firstFile = job.results[0].filePath;
+      const lastSlash = Math.max(firstFile.lastIndexOf('/'), firstFile.lastIndexOf('\\'));
+      if (lastSlash >= 0) {
+        this.folderPath = firstFile.substring(0, lastSlash);
+      }
+    }
+    
+    // Nếu vẫn không có folderPath, thì fallback (phòng hờ)
+    if (!this.folderPath) {
+      this.message.error('Không tìm thấy thư mục của session này');
+      return;
+    }
+    
+    this.playlistId = job.playlistId || '';
+    
+    // 2. Tự động bấm Quét
+    this.scanFolder();
+    
+    // Cuộn lên đầu trang
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    this.message.info('Đã tải lại thư mục. Các file thành công đã tự động bị bỏ qua!');
+  }
+
+  deleteHistoryJob(sessionId: string): void {
+    this.api.deleteUploadHistory(sessionId).subscribe({
+      next: () => {
+        this.message.success('Đã xóa khỏi lịch sử');
+        this.loadHistory();
+      },
+      error: () => this.message.error('Lỗi khi xóa')
+    });
+  }
+
+  formatDateTime(iso: string): string {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return d.toLocaleString('vi-VN', { hour12: false });
+  }
+
+  getVideoStatusColor(status: string): string {
+    switch (status) {
+      case 'SUCCESS':
+      case 'DONE': return 'green';
+      case 'FAILED':
+      case 'ERROR': return 'red';
+      case 'UPLOADING': return 'blue';
+      case 'PENDING': return 'default';
+      default: return 'default';
+    }
+  }
+
+  getVideoStatusText(status: string): string {
+    switch (status) {
+      case 'SUCCESS':
+      case 'DONE': return 'Upload hoàn thành / Đã tồn tại';
+      case 'FAILED':
+      case 'ERROR': return 'Upload lỗi';
+      case 'UPLOADING': return 'Đang upload...';
+      case 'PENDING': return 'Chờ upload';
+      default: return status || 'Không xác định';
+    }
   }
 
   // ─────────────────────────────────────────────────────
@@ -298,6 +387,39 @@ export class UploadComponent implements OnInit, OnDestroy {
       this.uploadState = 'done';
       this.eventSource?.close();
     }
+  }
+
+  retryFailed(): void {
+    const failedFiles = this.fileStates.filter(f => f.status === 'ERROR');
+    if (!failedFiles.length) {
+      this.message.warning('Không có video nào bị lỗi để thử lại');
+      return;
+    }
+
+    const filePaths = failedFiles.map(f => f.filePath);
+
+    // Xóa session cũ, reset trạng thái các file lỗi về PENDING, giữ nguyên các file thành công
+    failedFiles.forEach(f => {
+      f.status = 'PENDING';
+      f.progress = 0;
+      f.error = undefined;
+    });
+
+    this.uploadState = 'running';
+    this.overallStatus = 'Đang khởi động lại...';
+    this.eventSource?.close();
+
+    this.api.startUpload({ playlistId: this.playlistId, filePaths }).subscribe({
+      next: (res: any) => {
+        if (!res.success) { this.message.error(res.message || 'Lỗi tạo session'); this.uploadState = 'done'; return; }
+        this.sessionId = res.sessionId;
+        this.connectSse(res.sessionId);
+      },
+      error: (err: any) => {
+        this.message.error(err?.error?.message || 'Lỗi kết nối server');
+        this.uploadState = 'done';
+      }
+    });
   }
 
   reset(): void {

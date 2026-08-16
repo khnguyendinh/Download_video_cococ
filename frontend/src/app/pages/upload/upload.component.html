@@ -178,9 +178,12 @@
         <div class="video-rows">
           <div class="video-row" *ngFor="let f of scannedFiles; let i = index"
             [class.selected]="f.selected"
-            (click)="f.selected = !f.selected">
+            [style.opacity]="f.previousStatus === 'SUCCESS' ? '0.5' : '1'"
+            [style.cursor]="f.previousStatus === 'SUCCESS' ? 'not-allowed' : 'pointer'"
+            (click)="f.previousStatus !== 'SUCCESS' && (f.selected = !f.selected)">
 
             <label nz-checkbox [(ngModel)]="f.selected"
+              [nzDisabled]="f.previousStatus === 'SUCCESS'"
               (click)="$event.stopPropagation()"
               [id]="'chk-video-' + i">
             </label>
@@ -297,9 +300,93 @@
 
       <!-- Done actions -->
       <div class="done-actions" *ngIf="uploadState === 'done'">
+        <button nz-button nzType="primary" nzDanger nzSize="large" (click)="retryFailed()" *ngIf="errorCount > 0" style="margin-right: 12px">
+          🔄 Thử lại các video lỗi ({{ errorCount }})
+        </button>
         <button nz-button nzType="default" nzSize="large" (click)="reset()" id="btn-upload-reset">
           🔄 Upload thêm
         </button>
+      </div>
+    </nz-card>
+
+    <!-- ====== HISTORY SECTION ====== -->
+    <nz-card class="glass-card" *ngIf="uploadState === 'idle' && historySessions.length > 0" style="margin-top: 24px">
+      <div class="card-header-row">
+        <span class="card-icon">🕒</span>
+        <span class="card-label">Lịch sử Upload</span>
+        <nz-tag class="badge badge-checking" style="margin-left: auto;">{{ historySessions.length }} phiên</nz-tag>
+      </div>
+
+      <div class="video-rows" style="margin-top: 16px;">
+        <div *ngFor="let job of historySessions; let i = index" class="job-card-wrapper" style="margin-bottom: 12px;">
+          <!-- Job header row -->
+          <div class="video-row" style="align-items: center; cursor: pointer;" (click)="job.expanded = !job.expanded">
+            <div class="video-ext" style="font-size: 16px;">#{{ i + 1 }}</div>
+
+            <div class="video-meta" style="flex: 2">
+              <div class="video-name" style="font-weight: 500;">
+                Thư mục: {{ (job.results && job.results[0]?.filePath) ? (job.results[0].filePath | slice:0:job.results[0].filePath.lastIndexOf('\\')) : 'N/A' }}
+              </div>
+              <div class="video-path" *ngIf="job.playlistId">Playlist: {{ job.playlistId }}</div>
+              <div class="video-path" style="margin-top: 4px;">
+                Bắt đầu: {{ formatDateTime(job.startedAt) }}
+              </div>
+            </div>
+
+            <div class="video-status-badge" style="flex: 1.5; justify-content: flex-start; gap: 8px;">
+              <nz-tag class="badge-prev-ok" *ngIf="job.completedFiles > 0">✅ {{ job.completedFiles }} xong</nz-tag>
+              <nz-tag class="badge-prev-fail" *ngIf="job.failedFiles > 0">❌ {{ job.failedFiles }} lỗi</nz-tag>
+              <nz-tag nzColor="default" *ngIf="job.completedFiles === 0 && job.failedFiles === 0">0/{{ job.totalFiles }}</nz-tag>
+            </div>
+
+            <div class="action-col" style="display: flex; gap: 8px;">
+              <button nz-button nzType="primary" nzSize="small"
+                nz-tooltip nzTooltipTitle="Tải lại thư mục này (bỏ qua file đã upload thành công)"
+                (click)="$event.stopPropagation(); retryHistoryJob(job)">
+                <span nz-icon nzType="sync"></span> Retry
+              </button>
+              <button nz-button nzDanger nzSize="small" nzType="text"
+                (click)="$event.stopPropagation(); deleteHistoryJob(job.sessionId)">
+                <span nz-icon nzType="delete"></span>
+              </button>
+              <span nz-icon [nzType]="job.expanded ? 'up' : 'down'" style="margin-left: 8px; color: #888;"></span>
+            </div>
+          </div>
+          
+          <!-- Expanded: video list + logs -->
+          <div class="job-expanded-content" *ngIf="job.expanded" style="padding: 16px; background: rgba(0,0,0,0.2); border-radius: 0 0 8px 8px; border: 1px solid rgba(255,255,255,0.05); border-top: none;">
+            <div class="two-col-expand" style="display: flex; gap: 16px;">
+              <!-- Video list -->
+              <div class="expand-section" style="flex: 1; min-width: 0;">
+                <div class="expand-label" style="font-size: 13px; font-weight: 600; margin-bottom: 8px; color: #aaa;">🎬 Danh sách video ({{ job.results?.length || 0 }})</div>
+                <div class="video-list-scroll" style="max-height: 250px; overflow-y: auto; padding-right: 8px;">
+                  <div *ngFor="let v of job.results; let vi = index"
+                    class="video-item-mini"
+                    style="display: flex; align-items: center; padding: 6px 8px; background: rgba(255,255,255,0.03); border-radius: 4px; margin-bottom: 4px;"
+                    [class.vi-done]="v.status === 'SUCCESS'"
+                    [class.vi-fail]="v.status === 'FAILED'">
+                    <span class="vi-idx" style="color: #666; width: 24px; font-size: 12px;">{{ vi + 1 }}</span>
+                    <span class="vi-title" style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; margin: 0 8px;" [title]="v.fileName">{{ v.fileName }}</span>
+                    <nz-tag [nzColor]="getVideoStatusColor(v.status)" style="margin: 0;"
+                            nz-tooltip [nzTooltipTitle]="getVideoStatusText(v.status)">
+                      {{ v.status === 'SUCCESS' ? '✅' : v.status === 'FAILED' ? '❌' : '⏳' }}
+                    </nz-tag>
+                  </div>
+                  <div *ngIf="!job.results?.length" class="empty-list" style="color: #666; font-size: 12px; font-style: italic;">Chưa có dữ liệu</div>
+                </div>
+              </div>
+  
+              <!-- Logs -->
+              <div class="expand-section" style="flex: 1; min-width: 0;">
+                <div class="expand-label" style="font-size: 13px; font-weight: 600; margin-bottom: 8px; color: #aaa;">📋 Logs ({{ job.logs?.length || 0 }} dòng)</div>
+                <div class="log-terminal-mini" style="max-height: 250px; overflow-y: auto; background: #1e1e1e; padding: 8px; border-radius: 4px; font-family: monospace; font-size: 12px;">
+                  <div *ngFor="let log of job.logs" style="margin-bottom: 2px; line-height: 1.4; color: #ccc; word-wrap: break-word; white-space: pre-wrap;">{{ log }}</div>
+                  <div *ngIf="!job.logs?.length" class="empty-list" style="color: #666; font-style: italic;">Chưa có log</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </nz-card>
 
