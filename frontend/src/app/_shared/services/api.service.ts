@@ -78,6 +78,44 @@ export class ApiService {
   deleteUploadHistory(sessionId: string): Observable<any> {
     return this.http.delete<any>(`${this.baseUrl}/api/upload/history/${sessionId}`);
   }
+
+  // ─── Convert audio + ảnh → MP4 ───────────────────────────────
+
+  /** Mở hộp thoại chọn file của Windows (phía backend) → trả về đường dẫn thật */
+  pickFiles(type: 'audio' | 'image'): Observable<{ files: string[] }> {
+    const params = new HttpParams().set('type', type);
+    return this.http.get<{ files: string[] }>(`${this.baseUrl}/api/convert/pick`, { params });
+  }
+
+  startConvert(payload: { audioPaths: string[]; imagePath: string }): Observable<ConvertJob> {
+    return this.http.post<ConvertJob>(`${this.baseUrl}/api/convert/start`, payload);
+  }
+
+  getConvertStatus(jobId: string): Observable<ConvertJob> {
+    return this.http.get<ConvertJob>(`${this.baseUrl}/api/convert/status/${jobId}`);
+  }
+
+  cancelConvert(jobId: string): Observable<any> {
+    return this.http.post(`${this.baseUrl}/api/convert/cancel/${jobId}`, {});
+  }
+}
+
+export interface ConvertItem {
+  audioPath: string;
+  audioName: string;
+  outputPath: string;
+  status: 'PENDING' | 'CONVERTING' | 'DONE' | 'ERROR' | 'CANCELLED';
+  progress: number;
+  durationSec: number;
+  error?: string;
+}
+
+export interface ConvertJob {
+  id: string;
+  imagePath: string;
+  status: 'RUNNING' | 'DONE' | 'CANCELLED';
+  items: ConvertItem[];
+  overallProgress: number;
 }
 
 export interface VideoFileInfo {

@@ -3,10 +3,12 @@ import { RouterModule, Routes } from '@angular/router';
 import { DownloaderComponent } from './downloader/downloader.component';
 import { UploadComponent } from './upload/upload.component';
 import { OAuthCallbackComponent } from './oauth-callback/oauth-callback.component';
+import { ConvertComponent } from './convert/convert.component';
 
 const routes: Routes = [
   { path: '',             component: DownloaderComponent },
   { path: 'upload',      component: UploadComponent },
+  { path: 'convert',     component: ConvertComponent },
   { path: 'oauth-callback', component: OAuthCallbackComponent },
 ];
 

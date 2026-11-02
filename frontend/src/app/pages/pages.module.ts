@@ -23,10 +23,11 @@ import { NzCheckboxModule } from 'ng-zorro-antd/checkbox';
 import { DownloaderComponent } from './downloader/downloader.component';
 import { UploadComponent } from './upload/upload.component';
 import { OAuthCallbackComponent } from './oauth-callback/oauth-callback.component';
+import { ConvertComponent } from './convert/convert.component';
 import { PagesRoutingModule } from './pages-routing.module';
 
 @NgModule({
-  declarations: [DownloaderComponent, UploadComponent, OAuthCallbackComponent],
+  declarations: [DownloaderComponent, UploadComponent, OAuthCallbackComponent, ConvertComponent],
   imports: [
     CommonModule,
     ReactiveFormsModule,

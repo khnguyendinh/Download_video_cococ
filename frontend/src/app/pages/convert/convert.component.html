@@ -1,0 +1,161 @@
+<div class="upload-page">
+
+  <!-- HEADER + NAV TABS -->
+  <div class="page-header">
+    <div class="logo-wrap">
+      <span class="logo-icon">🎞</span>
+      <div>
+        <h1 class="page-title">Convert Audio → MP4</h1>
+        <p class="page-sub">Ghép ảnh nền + audio (mp3, m4a, wav, flac...) thành video · Xuất cùng thư mục với file audio</p>
+      </div>
+    </div>
+    <div class="page-tabs">
+      <a class="tab-item" routerLink="/">
+        <span class="tab-icon">⬇</span> Tải xuống
+      </a>
+      <a class="tab-item" routerLink="/upload">
+        <span class="tab-icon">☁</span> YouTube Upload
+      </a>
+      <a class="tab-item tab-active-force" routerLink="/convert">
+        <span class="tab-icon">🎞</span> Convert MP4
+      </a>
+    </div>
+  </div>
+
+  <div class="page-content">
+
+    <!-- ====== CHỌN FILE ====== -->
+    <nz-card class="glass-card" *ngIf="state === 'idle'">
+      <div class="card-header-row">
+        <span class="card-icon">⚙</span>
+        <span class="card-label">Chọn file</span>
+      </div>
+
+      <div class="convert-grid">
+        <!-- Ảnh nền -->
+        <div class="field-group">
+          <label class="field-label">🖼 Ảnh nền video</label>
+          <div class="image-box" [class.has-image]="imagePath" (click)="pickImage()">
+            <img *ngIf="imagePath" [src]="previewUrl" alt="Ảnh nền" />
+            <div class="image-placeholder" *ngIf="!imagePath">
+              <span class="ph-icon">🖼</span>
+              <span>Bấm để chọn ảnh</span>
+            </div>
+          </div>
+          <div class="field-hint" *ngIf="imagePath" [title]="imagePath">{{ fileName(imagePath) }}</div>
+          <button nz-button nzSize="large" class="btn-scan" [nzLoading]="pickingImage" (click)="pickImage()" id="btn-pick-image">
+            🖼 {{ imagePath ? 'Đổi ảnh' : 'Chọn ảnh' }}
+          </button>
+        </div>
+
+        <!-- Audio -->
+        <div class="field-group audio-col">
+          <label class="field-label">
+            🎵 File audio
+            <span class="field-optional">(chọn được nhiều file, nhiều thư mục)</span>
+          </label>
+
+          <div class="action-row">
+            <button nz-button nzType="primary" nzSize="large" class="btn-scan" [nzLoading]="pickingAudio" (click)="pickAudio()" id="btn-pick-audio">
+              ➕ Thêm file audio
+            </button>
+            <button nz-button nzSize="large" class="btn-recheck" *ngIf="audioPaths.length" (click)="clearAudio()">
+              🗑 Bỏ chọn tất cả
+            </button>
+            <nz-tag class="tag-count" *ngIf="audioPaths.length">{{ audioPaths.length }} file</nz-tag>
+          </div>
+
+          <div class="video-rows" *ngIf="audioPaths.length">
+            <div class="video-row" *ngFor="let p of audioPaths; let i = index">
+              <div class="video-ext">{{ ext(p) }}</div>
+              <div class="video-meta">
+                <div class="video-name">{{ fileName(p) }}</div>
+                <div class="video-path">{{ folderOf(p) }}</div>
+              </div>
+              <button nz-button nzSize="small" nzDanger (click)="removeAudio(i)" title="Bỏ file này">✕</button>
+            </div>
+          </div>
+          <div class="field-hint" *ngIf="!audioPaths.length">
+            Hỗ trợ mp3, m4a, aac, wav, flac, ogg, opus, wma... File .mp4 sẽ có cùng tên và nằm cùng thư mục với file audio.
+          </div>
+        </div>
+      </div>
+
+      <div class="action-row" style="margin-top: 24px">
+        <button nz-button nzType="primary" nzSize="large" class="btn-upload"
+          id="btn-start-convert" [disabled]="!canStart" [nzLoading]="starting" (click)="start()">
+          🎬 Convert {{ audioPaths.length ? '(' + audioPaths.length + ' file)' : '' }} sang MP4
+        </button>
+        <span class="action-hint" *ngIf="!imagePath">Chưa chọn ảnh nền</span>
+        <span class="action-hint" *ngIf="imagePath && !audioPaths.length">Chưa chọn file audio</span>
+      </div>
+    </nz-card>
+
+    <!-- ====== TIẾN TRÌNH ====== -->
+    <nz-card class="glass-card" *ngIf="state !== 'idle' && job">
+      <div class="card-header-row">
+        <span class="card-icon">🎬</span>
+        <span class="card-label">Đang convert</span>
+        <div class="ml-auto queue-stats">
+          <nz-tag class="badge badge-ok" *ngIf="count('DONE') > 0">✅ {{ count('DONE') }} xong</nz-tag>
+          <nz-tag class="badge badge-error" *ngIf="count('ERROR') > 0">❌ {{ count('ERROR') }} lỗi</nz-tag>
+          <nz-tag class="badge badge-checking" *ngIf="state === 'running'">⏳ Đang chạy...</nz-tag>
+          <nz-tag class="badge badge-ok" *ngIf="job.status === 'DONE'">🎉 Hoàn tất</nz-tag>
+          <nz-tag class="badge badge-warn" *ngIf="job.status === 'CANCELLED'">⛔ Đã huỷ</nz-tag>
+        </div>
+      </div>
+
+      <div class="overall-status">
+        <span class="status-dot" [class.pulse]="state === 'running'"></span>
+        Tổng tiến trình: {{ count('DONE') + count('ERROR') }}/{{ job.items.length }} file · {{ job.overallProgress | number:'1.0-1' }}%
+      </div>
+      <nz-progress
+        [nzPercent]="Math.floor(job.overallProgress)"
+        [nzStatus]="state === 'done' ? (count('ERROR') > 0 || job.status === 'CANCELLED' ? 'exception' : 'success') : 'active'"
+        [nzStrokeColor]="{'0%':'#7c3aed','100%':'#3b82f6'}"
+        style="margin-bottom: 20px">
+      </nz-progress>
+
+      <div class="file-queue">
+        <div class="file-item" *ngFor="let f of job.items; let i = index"
+          [class.status-pending]="f.status === 'PENDING' || f.status === 'CANCELLED'"
+          [class.status-uploading]="f.status === 'CONVERTING'"
+          [class.status-done]="f.status === 'DONE'"
+          [class.status-error]="f.status === 'ERROR'">
+
+          <div class="file-num">{{ i + 1 }}</div>
+
+          <div class="file-info">
+            <div class="file-name">{{ f.audioName }} <span class="dur" *ngIf="f.durationSec">· {{ formatDuration(f.durationSec) }}</span></div>
+            <div class="file-path">→ {{ f.outputPath }}</div>
+            <nz-progress *ngIf="f.status === 'CONVERTING'"
+              [nzPercent]="Math.floor(f.progress)"
+              nzSize="small" nzStatus="active"
+              [nzStrokeColor]="{'0%':'#7c3aed','100%':'#3b82f6'}"
+              style="margin-top: 6px">
+            </nz-progress>
+            <div class="error-msg" *ngIf="f.error">⚠ {{ f.error }}</div>
+          </div>
+
+          <div class="file-status-badge">
+            <span *ngIf="f.status === 'PENDING'"    class="status-icon">⏸</span>
+            <span *ngIf="f.status === 'CANCELLED'"  class="status-icon">⛔</span>
+            <span *ngIf="f.status === 'CONVERTING'" class="status-icon spin">↻</span>
+            <span *ngIf="f.status === 'DONE'"       class="status-icon done">✅</span>
+            <span *ngIf="f.status === 'ERROR'"      class="status-icon err">❌</span>
+            <span *ngIf="f.status === 'CONVERTING'" class="pct-label">{{ f.progress | number:'1.0-1' }}%</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="done-actions">
+        <button nz-button nzDanger nzSize="large" *ngIf="state === 'running'" (click)="cancel()" id="btn-cancel-convert">
+          ⛔ Huỷ
+        </button>
+        <button nz-button nzType="primary" nzSize="large" *ngIf="state === 'done'" (click)="reset()" id="btn-convert-more">
+          🔄 Convert tiếp
+        </button>
+      </div>
+    </nz-card>
+  </div>
+</div>
