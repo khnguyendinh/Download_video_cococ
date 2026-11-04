@@ -43,7 +43,7 @@
             </div>
           </div>
           <div class="field-hint" *ngIf="imagePath" [title]="imagePath">{{ fileName(imagePath) }}</div>
-          <button nz-button nzSize="large" class="btn-scan" [nzLoading]="pickingImage" (click)="pickImage()" id="btn-pick-image">
+          <button nz-button nzSize="large" class="btn-scan" (click)="pickImage()" id="btn-pick-image">
             🖼 {{ imagePath ? 'Đổi ảnh' : 'Chọn ảnh' }}
           </button>
         </div>
@@ -56,7 +56,7 @@
           </label>
 
           <div class="action-row">
-            <button nz-button nzType="primary" nzSize="large" class="btn-scan" [nzLoading]="pickingAudio" (click)="pickAudio()" id="btn-pick-audio">
+            <button nz-button nzType="primary" nzSize="large" class="btn-scan" (click)="pickAudio()" id="btn-pick-audio">
               ➕ Thêm file audio
             </button>
             <button nz-button nzSize="large" class="btn-recheck" *ngIf="audioPaths.length" (click)="clearAudio()">

@@ -41,9 +41,13 @@ public class ConvertController {
     /** Thư mục mở lần trước, để lần sau hộp thoại mở đúng chỗ. */
     private volatile String lastDir = "";
 
+    /** Hộp thoại đang mở; lần bấm mới sẽ đóng nó chứ không xếp hàng chờ. */
+    private Process activeDialog;
+
     @GetMapping("/pick")
-    public synchronized ResponseEntity<?> pick(@RequestParam(defaultValue = "audio") String type) {
+    public ResponseEntity<?> pick(@RequestParam(defaultValue = "audio") String type) {
         boolean audio = !"image".equals(type);
+        log.info("Mở hộp thoại chọn file: {}", audio ? "audio" : "image");
         try {
             List<String> files = openFileDialog(
                     audio ? "Chọn file audio (chọn được nhiều file)" : "Chọn ảnh nền",
@@ -109,7 +113,36 @@ public class ConvertController {
     private List<String> openFileDialog(String title, String filter, boolean multi) throws Exception {
         String script = String.join("\n",
                 "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8",
+                "$ProgressPreference = 'SilentlyContinue'",
                 "Add-Type -AssemblyName System.Windows.Forms",
+                // Process chạy nền không được tự lấy focus nên hộp thoại hay nằm sau trình duyệt → ép lên trên
+                "Add-Type -TypeDefinition @'",
+                "using System;",
+                "using System.Runtime.InteropServices;",
+                "public class DialogFront {",
+                "  [DllImport(\"user32.dll\", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindow(string c, string t);",
+                "  [DllImport(\"user32.dll\")] static extern IntPtr GetForegroundWindow();",
+                "  [DllImport(\"user32.dll\")] static extern uint GetWindowThreadProcessId(IntPtr h, IntPtr pid);",
+                "  [DllImport(\"user32.dll\")] static extern bool AttachThreadInput(uint a, uint b, bool attach);",
+                "  [DllImport(\"user32.dll\")] static extern bool SetForegroundWindow(IntPtr h);",
+                "  [DllImport(\"user32.dll\")] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int w, int ht, uint flags);",
+                "  [DllImport(\"user32.dll\")] static extern void keybd_event(byte k, byte s, uint f, UIntPtr e);",
+                "  [DllImport(\"kernel32.dll\")] static extern uint GetCurrentThreadId();",
+                "  public static void Force(IntPtr h) {",
+                "    SetWindowPos(h, new IntPtr(-1), 0, 0, 0, 0, 0x43);",
+                "    uint me = GetCurrentThreadId();",
+                "    uint fg = GetWindowThreadProcessId(GetForegroundWindow(), IntPtr.Zero);",
+                "    bool attached = fg != 0 && fg != me && AttachThreadInput(me, fg, true);",
+                "    SetForegroundWindow(h);",
+                "    if (attached) AttachThreadInput(me, fg, false);",
+                "    if (GetForegroundWindow() != h) {",
+                "      keybd_event(0x12, 0, 0, UIntPtr.Zero);",
+                "      keybd_event(0x12, 0, 2, UIntPtr.Zero);",
+                "      SetForegroundWindow(h);",
+                "    }",
+                "  }",
+                "}",
+                "'@",
                 "$owner = New-Object System.Windows.Forms.Form",
                 "$owner.TopMost = $true",
                 "$d = New-Object System.Windows.Forms.OpenFileDialog",
@@ -117,6 +150,10 @@ public class ConvertController {
                 "$d.Filter = " + psQuote(filter),
                 "$d.Multiselect = $" + multi,
                 lastDir.isBlank() ? "" : "$d.InitialDirectory = " + psQuote(lastDir),
+                "$t = New-Object System.Windows.Forms.Timer",
+                "$t.Interval = 30",
+                "$t.add_Tick({ $h = [DialogFront]::FindWindow('#32770', $d.Title); if ($h -ne [IntPtr]::Zero) { $t.Stop(); [DialogFront]::Force($h) } })",
+                "$t.Start()",
                 "if ($d.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) { $d.FileNames | ForEach-Object { [Console]::WriteLine($_) } }",
                 "$owner.Dispose()");
         String encoded = Base64.getEncoder().encodeToString(script.getBytes(StandardCharsets.UTF_16LE));
@@ -125,8 +162,20 @@ public class ConvertController {
                 "-ExecutionPolicy", "Bypass", "-EncodedCommand", encoded)
                 .redirectErrorStream(true)
                 .start();
+        Process previous;
+        synchronized (this) {
+            previous = activeDialog;
+            activeDialog = p;
+        }
+        if (previous != null) previous.destroyForcibly();
+
         String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         int exit = p.waitFor();
+        synchronized (this) {
+            // Bị lần bấm mới đóng → coi như chưa chọn gì
+            if (activeDialog != p) return List.of();
+            activeDialog = null;
+        }
 
         List<String> files = new ArrayList<>();
         for (String line : out.split("\\r?\\n")) {

@@ -14,8 +14,6 @@ export class ConvertComponent implements OnDestroy {
 
   audioPaths: string[] = [];
   imagePath = '';
-  pickingAudio = false;
-  pickingImage = false;
 
   state: 'idle' | 'running' | 'done' = 'idle';
   job?: ConvertJob;
@@ -32,30 +30,24 @@ export class ConvertComponent implements OnDestroy {
   // ─── Chọn file ──────────────────────────────────────
 
   pickAudio(): void {
-    this.pickingAudio = true;
     this.api.pickFiles('audio').subscribe({
       next: (res) => {
-        this.pickingAudio = false;
         const added = res.files.filter((f) => !this.audioPaths.includes(f));
         this.audioPaths = [...this.audioPaths, ...added];
         if (added.length) this.message.success(`Đã thêm ${added.length} file audio`);
       },
       error: (err) => {
-        this.pickingAudio = false;
         this.message.error(err?.error?.error || 'Không mở được hộp thoại chọn file');
       },
     });
   }
 
   pickImage(): void {
-    this.pickingImage = true;
     this.api.pickFiles('image').subscribe({
       next: (res) => {
-        this.pickingImage = false;
         if (res.files.length) this.imagePath = res.files[0];
       },
       error: (err) => {
-        this.pickingImage = false;
         this.message.error(err?.error?.error || 'Không mở được hộp thoại chọn file');
       },
     });
