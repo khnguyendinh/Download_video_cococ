@@ -5,6 +5,8 @@ export interface DownloadJob {
   playlistUrl: string;
   folderName: string;
   savePath: string;
+  /** Có giá trị = job tải khoá học (tab Khoá học), không hiện ở tab Tải xuống */
+  referer?: string;
   status: JobStatus;
   totalVideos: number;
   completedVideos: number;

@@ -75,9 +75,11 @@ export class DownloaderComponent implements OnInit, OnDestroy {
   loadHistory(): void {
     this.isLoadingHistory = true;
     this.api.getAllJobs().subscribe({
-      next: (jobs: DownloadJob[]) => {
+      next: (allJobs: DownloadJob[]) => {
         this.isLoadingHistory = false;
-        if (!jobs || jobs.length === 0) return;
+        // Job khoá học hiển thị ở tab Khoá học
+        const jobs = (allJobs || []).filter((j) => !j.referer);
+        if (jobs.length === 0) return;
 
         // Chuyển DownloadJob[] → JobState[]
         this.jobStates = jobs.map((j) => this.jobToState(j, true));

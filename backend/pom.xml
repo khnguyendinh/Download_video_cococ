@@ -67,6 +67,13 @@
             <artifactId>google-api-services-youtube</artifactId>
             <version>v3-rev20260709-2.0.0</version>
         </dependency>
+
+        <!-- Playwright: điều khiển Chrome thật (qua CDP) để đăng nhập + lấy danh sách bài học -->
+        <dependency>
+            <groupId>com.microsoft.playwright</groupId>
+            <artifactId>playwright</artifactId>
+            <version>1.49.0</version>
+        </dependency>
     </dependencies>
 
     <build>

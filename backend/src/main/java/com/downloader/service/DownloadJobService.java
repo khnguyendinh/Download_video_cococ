@@ -4,6 +4,7 @@ import com.downloader.model.DownloadJob;
 import com.downloader.model.DownloadRequest;
 import com.downloader.model.VideoInfo;
 import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
@@ -18,6 +19,8 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -33,6 +36,18 @@ public class DownloadJobService {
 
     // SSE emitters cho từng job
     private final Map<String, List<SseEmitter>> jobEmitters = new ConcurrentHashMap<>();
+
+    // Hàng đợi tải khoá học: 1 thread duy nhất → các job chạy lần lượt theo thứ tự thêm vào
+    private final ExecutorService queueExecutor = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "site-download-queue");
+        t.setDaemon(true);
+        return t;
+    });
+
+    @PreDestroy
+    public void shutdownQueue() {
+        queueExecutor.shutdownNow();
+    }
 
     /**
      * Load lịch sử jobs từ file JSON khi khởi động app
@@ -113,17 +128,67 @@ public class DownloadJobService {
     }
 
     /**
+     * Tạo job đã có sẵn danh sách video (không cần yt-dlp lấy playlist) — dùng cho tải khoá học
+     */
+    public DownloadJob createPresetJob(String pageUrl, String folderName, String savePath,
+                                       String referer, List<VideoInfo> videos) {
+        String jobId = UUID.randomUUID().toString();
+        DownloadJob job = DownloadJob.builder()
+                .id(jobId)
+                .playlistUrl(pageUrl)
+                .folderName(folderName)
+                .savePath(savePath)
+                .referer(referer)
+                .status(DownloadJob.JobStatus.PENDING)
+                .startedAt(LocalDateTime.now())
+                .videos(new CopyOnWriteArrayList<>(videos))
+                .logs(new CopyOnWriteArrayList<>())
+                .totalVideos(videos.size())
+                .build();
+
+        jobs.put(jobId, job);
+        job.addLog("🕒 Đã vào hàng đợi: " + videos.size() + " video");
+        persistenceService.saveAll(jobs);
+        return job;
+    }
+
+    /**
+     * Đưa job (đã có danh sách video) vào hàng đợi — chạy sau khi các job trước xong
+     */
+    public void enqueuePresetJob(String jobId) {
+        queueExecutor.submit(() -> {
+            DownloadJob job = jobs.get(jobId);
+            if (job == null || job.getStatus() == DownloadJob.JobStatus.CANCELLED) {
+                log.info("Queue: bỏ qua job {} (đã xoá hoặc huỷ)", jobId);
+                return;
+            }
+            log.info("Queue: bắt đầu job {} (folder: {})", jobId, job.getFolderName());
+            executePresetVideosInternal(jobId, job.getFolderName(), "🏁 Hoàn thành!");
+        });
+    }
+
+    /**
      * Tạo retry job từ các video FAILED của job gốc
      */
     public DownloadJob createRetryJob(String originalJobId) {
+        return createRetryJob(originalJobId, false);
+    }
+
+    /**
+     * Tạo retry job. includeUnfinished = true: lấy cả video chưa tải tới (job bị huỷ / app restart giữa chừng)
+     */
+    public DownloadJob createRetryJob(String originalJobId, boolean includeUnfinished) {
         DownloadJob original = jobs.get(originalJobId);
         if (original == null) throw new RuntimeException("Job không tồn tại: " + originalJobId);
 
         List<VideoInfo> failedVideos = original.getVideos().stream()
-                .filter(v -> v.getStatus() == VideoInfo.VideoStatus.FAILED)
+                .filter(v -> v.getStatus() == VideoInfo.VideoStatus.FAILED
+                        || (includeUnfinished && (v.getStatus() == VideoInfo.VideoStatus.PENDING
+                                || v.getStatus() == VideoInfo.VideoStatus.DOWNLOADING)))
                 .map(v -> VideoInfo.builder()
                         .id(v.getId()).title(v.getTitle()).url(v.getUrl())
                         .duration(v.getDuration()).index(v.getIndex())
+                        .fileBaseName(v.getFileBaseName())
                         .status(VideoInfo.VideoStatus.PENDING).progress(0).build())
                 .collect(Collectors.toList());
 
@@ -135,6 +200,7 @@ public class DownloadJobService {
                 .playlistUrl(original.getPlaylistUrl())
                 .folderName(original.getFolderName())
                 .savePath(original.getSavePath())
+                .referer(original.getReferer())
                 .status(DownloadJob.JobStatus.PENDING)
                 .startedAt(LocalDateTime.now())
                 .videos(new CopyOnWriteArrayList<>(failedVideos))
@@ -323,6 +389,20 @@ public class DownloadJobService {
             log.error("Retry job not found: {}", jobId);
             return;
         }
+        executePresetVideosInternal(jobId, "[RETRY] " + job.getFolderName(), "🏁 Retry xong!");
+    }
+
+    /**
+     * Tải thẳng danh sách video đã có trong job (retry job, job khoá học)
+     */
+    private void executePresetVideosInternal(String jobId, String playlistTitle, String summaryPrefix) {
+        DownloadJob job = jobs.get(jobId);
+        if (job == null) {
+            log.error("Preset job not found: {}", jobId);
+            return;
+        }
+        // Tính thời gian tải từ lúc thật sự chạy (không tính thời gian chờ trong hàng đợi)
+        job.setStartedAt(LocalDateTime.now());
 
         try {
             // Tạo output directory
@@ -335,7 +415,7 @@ public class DownloadJobService {
             sendSseEvent(jobId, "playlist_info", Map.of(
                     "videos", job.getVideos(),
                     "total", job.getVideos().size(),
-                    "playlistTitle", "[RETRY] " + job.getFolderName()));
+                    "playlistTitle", playlistTitle));
 
             // Bắt đầu download
             job.setStatus(DownloadJob.JobStatus.DOWNLOADING);
@@ -391,8 +471,8 @@ public class DownloadJobService {
                 job.setStatus(DownloadJob.JobStatus.COMPLETED);
             }
 
-            String summary = String.format("🏁 Retry xong! ✅ %d thành công, ❌ %d thất bại",
-                    job.getCompletedVideos(), job.getFailedVideos());
+            String summary = String.format("%s ✅ %d thành công, ❌ %d thất bại",
+                    summaryPrefix, job.getCompletedVideos(), job.getFailedVideos());
             job.addLog(summary);
             sendSseEvent(jobId, "status", buildStatusEvent(job));
             sendSseEvent(jobId, "done", Map.of(
@@ -405,7 +485,7 @@ public class DownloadJobService {
             persistenceService.saveAll(jobs);
 
         } catch (Exception e) {
-            log.error("Fatal error in retry job {}", jobId, e);
+            log.error("Fatal error in preset/retry job {}", jobId, e);
             job.setStatus(DownloadJob.JobStatus.FAILED);
             job.setFinishedAt(LocalDateTime.now());
             job.calculateDuration();
@@ -499,7 +579,9 @@ public class DownloadJobService {
 
     public boolean cancelJob(String jobId) {
         DownloadJob job = jobs.get(jobId);
-        if (job != null && job.getStatus() == DownloadJob.JobStatus.DOWNLOADING) {
+        // PENDING = job đang chờ trong hàng đợi → huỷ để hàng đợi bỏ qua
+        if (job != null && (job.getStatus() == DownloadJob.JobStatus.DOWNLOADING
+                || job.getStatus() == DownloadJob.JobStatus.PENDING)) {
             job.setStatus(DownloadJob.JobStatus.CANCELLED);
             job.setFinishedAt(LocalDateTime.now());
             job.calculateDuration();

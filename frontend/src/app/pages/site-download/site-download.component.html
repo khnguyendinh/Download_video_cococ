@@ -1,0 +1,187 @@
+<div class="upload-page">
+
+  <!-- HEADER + NAV TABS -->
+  <div class="page-header">
+    <div class="logo-wrap">
+      <span class="logo-icon">🎓</span>
+      <div>
+        <h1 class="page-title">Tải video khoá học</h1>
+        <p class="page-sub">Mở trang bài học trong Chrome · Bạn đăng nhập · Tool đọc danh sách bài và tải lần lượt theo hàng đợi</p>
+      </div>
+    </div>
+    <div class="page-tabs">
+      <a class="tab-item" routerLink="/">
+        <span class="tab-icon">⬇</span> Tải xuống
+      </a>
+      <a class="tab-item tab-active-force" routerLink="/course">
+        <span class="tab-icon">🎓</span> Khoá học
+      </a>
+      <a class="tab-item" routerLink="/upload">
+        <span class="tab-icon">☁</span> YouTube Upload
+      </a>
+      <a class="tab-item" routerLink="/convert">
+        <span class="tab-icon">🎞</span> Convert MP4
+      </a>
+    </div>
+  </div>
+
+  <div class="page-content">
+
+    <!-- ====== BƯỚC 1: LINK + ĐĂNG NHẬP ====== -->
+    <nz-card class="glass-card">
+      <div class="card-header-row">
+        <span class="card-icon">🔗</span>
+        <span class="card-label">Link trang bài học</span>
+        <div class="ml-auto" *ngIf="status?.email">
+          <nz-tag class="badge badge-ok">👤 {{ status?.email }}</nz-tag>
+        </div>
+      </div>
+
+      <div class="field-group">
+        <div class="folder-input-row">
+          <input nz-input class="dark-input" id="site-url"
+            [(ngModel)]="url" (keyup.enter)="open()"
+            placeholder="https://davincihcm-hocdautu.com/lessons.html?level=S2" />
+          <button nz-button nzType="primary" nzSize="large" class="btn-scan" id="btn-site-open"
+            [nzLoading]="opening" [disabled]="isBusy" (click)="open()">
+            🌐 Mở &amp; lấy danh sách
+          </button>
+          <button nz-button nzSize="large" class="btn-recheck" *ngIf="status && status.state !== 'IDLE'"
+            (click)="closeBrowser()" title="Đóng cửa sổ Chrome">✕ Đóng Chrome</button>
+        </div>
+        <div class="field-hint">
+          Chrome sẽ mở trong một cửa sổ riêng. Lần đầu bạn đăng nhập ở đó; lần sau Chrome nhớ đăng nhập nên tool tự lấy luôn.
+        </div>
+      </div>
+
+      <div class="site-status" *ngIf="status && status.state !== 'IDLE'"
+        [class.st-wait]="status.state === 'WAITING_LOGIN'"
+        [class.st-err]="status.state === 'ERROR'"
+        [class.st-ok]="status.state === 'READY'">
+        <span class="status-dot" [class.pulse]="isBusy"></span>
+        <span>{{ status.message }}</span>
+      </div>
+    </nz-card>
+
+    <!-- ====== BƯỚC 2: CHỌN BÀI ====== -->
+    <nz-card class="glass-card" *ngIf="lessons.length">
+      <div class="card-header-row">
+        <span class="card-icon">📋</span>
+        <span class="card-label">{{ status?.scan?.levelName }} · {{ lessons.length }} bài</span>
+        <div class="ml-auto queue-stats">
+          <nz-tag class="tag-count">Đã chọn {{ selected.size }}/{{ downloadable.length }}</nz-tag>
+        </div>
+      </div>
+
+      <div class="save-grid">
+        <div class="field-group">
+          <label class="field-label">📁 Thư mục lưu</label>
+          <input nz-input class="dark-input" [(ngModel)]="savePath" placeholder="D:\Videos" id="site-save-path" />
+        </div>
+        <div class="field-group">
+          <label class="field-label">🗂 Tên folder <span class="field-optional">(tạo bên trong thư mục lưu)</span></label>
+          <input nz-input class="dark-input" [(ngModel)]="folderName" id="site-folder-name" />
+        </div>
+      </div>
+
+      <div class="list-header">
+        <label nz-checkbox [ngModel]="allChecked" (ngModelChange)="toggleAll()">
+          <span class="tick-all-text">Chọn tất cả</span>
+        </label>
+      </div>
+
+      <div class="video-rows lesson-rows">
+        <div class="video-row" *ngFor="let l of lessons" [class.row-disabled]="!l.url" (click)="toggle(l)">
+          <label nz-checkbox [nzDisabled]="!l.url" [ngModel]="selected.has(l.id)"
+            (click)="$event.stopPropagation()" (ngModelChange)="toggle(l)"></label>
+          <div class="video-ext">{{ l.index | number:'2.0-0' }}</div>
+          <div class="video-meta">
+            <div class="video-name">{{ l.title }}</div>
+            <div class="video-path">
+              {{ l.provider === 'youtube' ? 'YouTube' : 'Bunny Stream' }}
+              <span *ngIf="l.duration"> · {{ l.duration }}</span>
+              <span class="text-red" *ngIf="l.error"> · {{ l.error }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="action-row" style="margin-top: 20px">
+        <button nz-button nzType="primary" nzSize="large" class="btn-upload" id="btn-site-enqueue"
+          [disabled]="!canEnqueue" [nzLoading]="enqueuing" (click)="enqueue()">
+          ➕ Thêm {{ selected.size }} video vào hàng đợi
+        </button>
+        <span class="action-hint" *ngIf="!savePath.trim()">Chưa nhập thư mục lưu</span>
+      </div>
+    </nz-card>
+
+    <!-- ====== HÀNG ĐỢI ====== -->
+    <nz-card class="glass-card" *ngIf="jobs.length">
+      <div class="card-header-row">
+        <span class="card-icon">🧾</span>
+        <span class="card-label">Hàng đợi tải</span>
+        <div class="ml-auto queue-stats">
+          <nz-tag class="badge badge-checking" *ngIf="activeCount">⏳ {{ activeCount }} đang chạy / chờ</nz-tag>
+        </div>
+      </div>
+      <div class="field-hint" style="margin-bottom: 12px">Các mục chạy lần lượt từ trên xuống, mỗi lần một video.</div>
+
+      <div class="file-queue">
+        <div class="job-block" *ngFor="let j of jobs; let i = index">
+          <div class="file-item"
+            [class.status-pending]="j.status === 'PENDING' || j.status === 'CANCELLED'"
+            [class.status-uploading]="j.status === 'DOWNLOADING'"
+            [class.status-done]="j.status === 'COMPLETED' && !j.failedVideos"
+            [class.status-error]="j.status === 'FAILED' || j.failedVideos > 0">
+
+            <div class="file-num">{{ i + 1 }}</div>
+
+            <div class="file-info">
+              <div class="file-name">
+                {{ j.folderName }}
+                <span class="dur">· {{ j.completedVideos }}/{{ j.totalVideos }} video
+                  <span *ngIf="j.failedVideos" class="text-red"> · {{ j.failedVideos }} lỗi</span>
+                </span>
+              </div>
+              <div class="file-path">→ {{ j.savePath }}\{{ j.folderName }}</div>
+              <div class="file-path" *ngIf="j.status === 'DOWNLOADING' && j.currentVideoTitle">
+                ⬇ {{ j.currentVideoTitle }} · {{ j.currentVideoProgress | number:'1.0-1' }}%
+              </div>
+              <nz-progress *ngIf="j.status === 'DOWNLOADING' || j.status === 'PENDING'"
+                [nzPercent]="jobPercent(j)" nzSize="small"
+                [nzStatus]="j.status === 'DOWNLOADING' ? 'active' : 'normal'"
+                [nzStrokeColor]="{'0%':'#7c3aed','100%':'#3b82f6'}"
+                style="margin-top: 6px">
+              </nz-progress>
+            </div>
+
+            <div class="job-actions">
+              <span class="job-status">{{ statusLabel(j.status) }}</span>
+              <button nz-button nzSize="small" (click)="toggleExpand(j)">{{ expanded.has(j.id) ? 'Ẩn' : 'Chi tiết' }}</button>
+              <button nz-button nzSize="small" nzDanger *ngIf="j.status === 'PENDING' || j.status === 'DOWNLOADING'"
+                (click)="cancel(j)">⛔ Huỷ</button>
+              <button nz-button nzSize="small" nzType="primary" *ngIf="canRetry(j)" (click)="retry(j)">
+                🔄 Tải lại {{ unfinished(j) }} video
+              </button>
+              <button nz-button nzSize="small" *ngIf="j.status !== 'PENDING' && j.status !== 'DOWNLOADING'"
+                nz-popconfirm nzPopconfirmTitle="Xoá mục này khỏi lịch sử? (file đã tải vẫn giữ)"
+                (nzOnConfirm)="remove(j)">🗑</button>
+            </div>
+          </div>
+
+          <div class="job-detail" *ngIf="expanded.has(j.id)">
+            <div class="detail-video" *ngFor="let v of j.videos">
+              <span class="dv-icon">
+                {{ v.status === 'COMPLETED' ? '✅' : v.status === 'SKIPPED' ? '⏭' : v.status === 'FAILED' ? '❌' : v.status === 'DOWNLOADING' ? '⬇' : '⏸' }}
+              </span>
+              <span class="dv-title">{{ v.index | number:'2.0-0' }}. {{ v.title }}</span>
+              <span class="dv-pct" *ngIf="v.status === 'DOWNLOADING'">{{ v.progress | number:'1.0-1' }}%</span>
+              <div class="error-msg" *ngIf="v.errorMessage">⚠ {{ v.errorMessage }}</div>
+            </div>
+            <pre class="job-logs">{{ j.logs.slice(-15).join('\n') }}</pre>
+          </div>
+        </div>
+      </div>
+    </nz-card>
+  </div>
+</div>

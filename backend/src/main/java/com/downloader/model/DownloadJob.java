@@ -22,6 +22,10 @@ public class DownloadJob {
     private String playlistUrl;
     private String folderName;
     private String savePath;
+
+    /** Header Referer gửi kèm khi tải (video nhúng Bunny cần đúng domain trang gốc). Null = job YouTube thường */
+    private String referer;
+
     private JobStatus status;
     private int totalVideos;
     private int completedVideos;

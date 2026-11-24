@@ -24,10 +24,11 @@ import { DownloaderComponent } from './downloader/downloader.component';
 import { UploadComponent } from './upload/upload.component';
 import { OAuthCallbackComponent } from './oauth-callback/oauth-callback.component';
 import { ConvertComponent } from './convert/convert.component';
+import { SiteDownloadComponent } from './site-download/site-download.component';
 import { PagesRoutingModule } from './pages-routing.module';
 
 @NgModule({
-  declarations: [DownloaderComponent, UploadComponent, OAuthCallbackComponent, ConvertComponent],
+  declarations: [DownloaderComponent, UploadComponent, OAuthCallbackComponent, ConvertComponent, SiteDownloadComponent],
   imports: [
     CommonModule,
     ReactiveFormsModule,

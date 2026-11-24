@@ -33,3 +33,6 @@ backend/credentials.json
 backend/src/main/resources/client_secret*.json
 backend/tokens/
 tokens/
+
+# ===== Profile Chrome dùng để đăng nhập trang khoá học (chứa cookie đăng nhập) =====
+backend/browser-profile/

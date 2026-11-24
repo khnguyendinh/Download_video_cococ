@@ -32,6 +32,12 @@ ytdlp:
   path: yt-dlp
   # ffmpeg-path: C:/ffmpeg/bin/ffmpeg.exe  # Uncomment nếu cần chỉ định path ffmpeg
 
+# Tải khoá học (davincihcm-hocdautu.com) — mở Chrome thật để người dùng tự đăng nhập
+site:
+  browser-path: ""            # để trống = tự tìm Chrome, không có thì dùng Edge
+  debug-port: 9333            # cổng remote debugging (chỉ nghe 127.0.0.1)
+  profile-dir: browser-profile  # profile Chrome riêng, giữ đăng nhập giữa các lần chạy
+
 # Downloader — file lưu lịch sử jobs
 downloader:
   history-file: download-history.json

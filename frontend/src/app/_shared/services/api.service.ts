@@ -52,6 +52,28 @@ export class ApiService {
     return this.http.post<any>(`${this.baseUrl}/api/download/retry-failed-batch`, { jobIds });
   }
 
+  // ─── Tải khoá học (mở Chrome đăng nhập) ──────────────────────
+
+  siteOpen(url: string): Observable<SiteStatus> {
+    return this.http.post<SiteStatus>(`${this.baseUrl}/api/site/open`, { url });
+  }
+
+  siteStatus(): Observable<SiteStatus> {
+    return this.http.get<SiteStatus>(`${this.baseUrl}/api/site/status`);
+  }
+
+  siteClose(): Observable<any> {
+    return this.http.post(`${this.baseUrl}/api/site/close`, {});
+  }
+
+  siteEnqueue(payload: { savePath: string; folderName: string; lessonIds: string[] }): Observable<any> {
+    return this.http.post<any>(`${this.baseUrl}/api/site/enqueue`, payload);
+  }
+
+  siteRetry(jobId: string): Observable<any> {
+    return this.http.post<any>(`${this.baseUrl}/api/site/retry/${jobId}`, {});
+  }
+
   // ─── YouTube Upload ──────────────────────────────────────────
 
   checkUploadAuthStatus(): Observable<{ credentialsAvailable: boolean; authenticated: boolean }> {
@@ -98,6 +120,24 @@ export class ApiService {
   cancelConvert(jobId: string): Observable<any> {
     return this.http.post(`${this.baseUrl}/api/convert/cancel/${jobId}`, {});
   }
+}
+
+export interface SiteLesson {
+  id: string;
+  index: number;
+  title: string;
+  provider: string;
+  url: string;
+  error: string;
+  duration: string;
+}
+
+export interface SiteStatus {
+  state: 'IDLE' | 'OPENING' | 'WAITING_LOGIN' | 'SCANNING' | 'READY' | 'ERROR';
+  message: string;
+  email?: string;
+  targetUrl?: string;
+  scan?: { pageUrl: string; level: string; levelName: string; lessons: SiteLesson[] };
 }
 
 export interface ConvertItem {

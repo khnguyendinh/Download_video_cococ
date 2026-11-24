@@ -20,6 +20,9 @@ public class VideoInfo {
     private VideoStatus status;
     private double progress;
     private String savedFilename;
+
+    /** Tên file (không đuôi) muốn lưu. Null = dùng tiêu đề video do yt-dlp lấy */
+    private String fileBaseName;
     private String errorMessage;
 
     public enum VideoStatus {

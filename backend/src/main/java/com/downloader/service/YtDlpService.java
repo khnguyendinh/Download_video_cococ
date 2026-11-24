@@ -100,7 +100,7 @@ public class YtDlpService {
         Path outputPath = Paths.get(outputDir);
         Files.createDirectories(outputPath);
 
-        List<String> command = buildDownloadCommand(video.getUrl(), outputDir);
+        List<String> command = buildDownloadCommand(video.getUrl(), outputDir, video.getFileBaseName(), job.getReferer());
 
         log.info("Downloading video: {} -> {}", video.getTitle(), outputDir);
         job.addLog("⬇ Bắt đầu tải: " + video.getTitle());
@@ -114,8 +114,9 @@ public class YtDlpService {
 
         // Pattern để parse progress từ yt-dlp output
         // Ví dụ: [download]  45.3% of 150.00MiB at 2.50MiB/s ETA 00:45
+        // HLS (Bunny):  [download]  45.3% of ~ 150.00MiB at 2.50MiB/s ETA 00:45 (frag 10/100)
         Pattern progressPattern = Pattern.compile(
-                "\\[download\\]\\s+(\\d+\\.\\d+)%\\s+of\\s+([\\d.]+\\w+).*ETA\\s+([\\d:]+)"
+                "\\[download\\]\\s+(\\d+\\.\\d+)%\\s+of\\s+~?\\s*([\\d.]+\\w+).*ETA\\s+([\\d:]+)"
         );
         // Pattern lấy tên file đã lưu
         Pattern destPattern = Pattern.compile(
@@ -190,9 +191,18 @@ public class YtDlpService {
     /**
      * Build lệnh tải video với quality 720p
      */
-    private List<String> buildDownloadCommand(String videoUrl, String outputDir) {
+    private List<String> buildDownloadCommand(String videoUrl, String outputDir, String fileBaseName, String referer) {
         List<String> command = new ArrayList<>();
         command.add(ytDlpPath);
+
+        // Video nhúng (Bunny Stream...) chỉ phát khi Referer đúng domain trang gốc
+        if (referer != null && !referer.isBlank()) {
+            command.add("--referer");
+            command.add(referer);
+            // HLS chia nhiều mảnh nhỏ → tải song song cho nhanh
+            command.add("--concurrent-fragments");
+            command.add("4");
+        }
 
         // Format: tải độ phân giải cao nhất có thể (1080p, 4K tuỳ video)
         command.add("-f");
@@ -202,9 +212,11 @@ public class YtDlpService {
         command.add("--merge-output-format");
         command.add("mp4");
 
-        // Tên file = tên video YouTube (sanitize tự động bởi yt-dlp)
+        // Tên file: theo tên bài học nếu có, ngược lại = tên video (sanitize tự động bởi yt-dlp)
+        String baseName = sanitizeFileName(fileBaseName);
         command.add("-o");
-        command.add(outputDir + File.separator + "%(title)s.%(ext)s");
+        command.add(outputDir + File.separator
+                + (baseName.isEmpty() ? "%(title)s" : baseName.replace("%", "%%")) + ".%(ext)s");
 
         // ffmpeg path nếu có
         if (ffmpegPath != null && !ffmpegPath.isBlank()) {
@@ -236,6 +248,16 @@ public class YtDlpService {
         command.add(videoUrl);
 
         return command;
+    }
+
+    /** Bỏ ký tự Windows không cho dùng trong tên file, cắt bớt nếu quá dài */
+    static String sanitizeFileName(String name) {
+        if (name == null) return "";
+        String s = name.replaceAll("[\\\\/:*?\"<>|\\p{Cntrl}]", " ")
+                .replaceAll("\\s+", " ")
+                .trim()
+                .replaceAll("[. ]+$", "");
+        return s.length() > 150 ? s.substring(0, 150).trim() : s;
     }
 
     @FunctionalInterface
