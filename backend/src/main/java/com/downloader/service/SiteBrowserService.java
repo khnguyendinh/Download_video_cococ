@@ -363,17 +363,23 @@ public class SiteBrowserService {
         if (!host.equals(SITE_HOST) && !host.endsWith("." + SITE_HOST)) {
             throw new IllegalArgumentException("Hiện chỉ hỗ trợ link " + SITE_HOST);
         }
+        // Giống lessons.html: ưu tiên ?lv=, sau đó ?level=, so sánh theo chữ hoa
+        Map<String, String> params = new HashMap<>();
         String query = uri.getRawQuery();
         if (query != null) {
             for (String kv : query.split("&")) {
                 int eq = kv.indexOf('=');
-                if (eq > 0 && kv.substring(0, eq).equals("level")) {
-                    String lvl = URLDecoder.decode(kv.substring(eq + 1), StandardCharsets.UTF_8).trim();
-                    if (!lvl.isEmpty()) return lvl;
+                if (eq > 0) {
+                    params.putIfAbsent(kv.substring(0, eq),
+                            URLDecoder.decode(kv.substring(eq + 1), StandardCharsets.UTF_8).trim());
                 }
             }
         }
-        throw new IllegalArgumentException("Link cần có ?level=... (vd: https://" + SITE_HOST + "/lessons.html?level=S2)");
+        for (String key : List.of("lv", "level")) {
+            String lvl = params.get(key);
+            if (lvl != null && !lvl.isEmpty()) return lvl.toUpperCase(Locale.ROOT);
+        }
+        throw new IllegalArgumentException("Link cần có ?lv=... hoặc ?level=... (vd: https://" + SITE_HOST + "/lessons.html?lv=S1)");
     }
 
     private static boolean sameUrl(String a, String b) {
