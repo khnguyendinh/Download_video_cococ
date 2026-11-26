@@ -1,0 +1,202 @@
+<div class="upload-page">
+
+  <!-- HEADER + NAV TABS -->
+  <div class="page-header">
+    <div class="logo-wrap">
+      <span class="logo-icon">📄</span>
+      <div>
+        <h1 class="page-title">Tải tài liệu</h1>
+        <p class="page-sub">Dán link trang tài liệu (hoặc link Google Drive / Docs / Sheet) · Chọn file · Tải PDF, Slide, Sheet về máy</p>
+      </div>
+    </div>
+    <div class="page-tabs">
+      <a class="tab-item" routerLink="/">
+        <span class="tab-icon">⬇</span> Tải xuống
+      </a>
+      <a class="tab-item" routerLink="/course">
+        <span class="tab-icon">🎓</span> Khoá học
+      </a>
+      <a class="tab-item tab-active-force" routerLink="/docs">
+        <span class="tab-icon">📄</span> Tài liệu
+      </a>
+      <a class="tab-item" routerLink="/upload">
+        <span class="tab-icon">☁</span> YouTube Upload
+      </a>
+      <a class="tab-item" routerLink="/convert">
+        <span class="tab-icon">🎞</span> Convert MP4
+      </a>
+    </div>
+  </div>
+
+  <div class="page-content">
+
+    <!-- ====== BƯỚC 1: LINK ====== -->
+    <nz-card class="glass-card">
+      <div class="card-header-row">
+        <span class="card-icon">🔗</span>
+        <span class="card-label">Link trang tài liệu</span>
+      </div>
+
+      <div class="field-group">
+        <div class="folder-input-row">
+          <input nz-input class="dark-input" id="doc-url"
+            [(ngModel)]="url" (keyup.enter)="doScan()"
+            placeholder="https://davincihcm-hocdautu.com/tai-lieu.html" />
+          <button nz-button nzType="primary" nzSize="large" class="btn-scan" id="btn-doc-scan"
+            [nzLoading]="scanning" (click)="doScan()">
+            🔍 Lấy danh sách
+          </button>
+        </div>
+        <div class="field-hint">
+          Hỗ trợ trang tài liệu davincihcm-hocdautu.com, hoặc dán thẳng link
+          <code>drive.google.com/file/d/…</code> / <code>docs.google.com/spreadsheets/d/…</code>.
+          Không cần đăng nhập.
+        </div>
+      </div>
+    </nz-card>
+
+    <!-- ====== BƯỚC 2: CHỌN TÀI LIỆU ====== -->
+    <nz-card class="glass-card" *ngIf="scan">
+      <div class="card-header-row">
+        <span class="card-icon">📋</span>
+        <span class="card-label">{{ scan.pageTitle || 'Tài liệu' }} · {{ docs.length }} tài liệu</span>
+        <div class="ml-auto queue-stats">
+          <nz-tag class="tag-count">Đã chọn {{ selected.size }}</nz-tag>
+        </div>
+      </div>
+
+      <div class="save-grid">
+        <div class="field-group">
+          <label class="field-label">📁 Thư mục lưu</label>
+          <input nz-input class="dark-input" [(ngModel)]="savePath" placeholder="D:\Tai lieu" id="doc-save-path" />
+        </div>
+        <div class="field-group">
+          <label class="field-label">🗂 Tên folder <span class="field-optional">(để trống = lưu thẳng vào thư mục trên)</span></label>
+          <input nz-input class="dark-input" [(ngModel)]="folderName" id="doc-folder-name" />
+        </div>
+      </div>
+
+      <div class="format-row" *ngIf="hasGoogleDocs">
+        <span class="field-label">Google Sheet / Slide / Doc tải về dạng:</span>
+        <button type="button" class="chip" [class.on]="sheetFormat === 'office'" (click)="sheetFormat = 'office'">
+          Excel / PowerPoint / Word
+        </button>
+        <button type="button" class="chip" [class.on]="sheetFormat === 'pdf'" (click)="sheetFormat = 'pdf'">PDF</button>
+      </div>
+
+      <div class="filter-row">
+        <div class="chips">
+          <button type="button" class="chip" [class.on]="!typeFilter" (click)="typeFilter = ''">
+            Tất cả <span class="n">{{ docs.length }}</span>
+          </button>
+          <button type="button" class="chip" *ngFor="let t of types" [class.on]="typeFilter === t" (click)="typeFilter = t">
+            {{ t }} <span class="n">{{ countType(t) }}</span>
+          </button>
+        </div>
+        <input nz-input class="dark-input search" [(ngModel)]="query" placeholder="🔎 Tìm theo tên…" />
+      </div>
+
+      <div class="list-header">
+        <label nz-checkbox [ngModel]="allChecked" (ngModelChange)="toggleAll()">
+          <span class="tick-all-text">Chọn tất cả{{ typeFilter || query ? ' (đang lọc)' : '' }}</span>
+        </label>
+      </div>
+
+      <div class="video-rows lesson-rows">
+        <div class="video-row" *ngFor="let d of visible" [class.row-disabled]="!d.downloadable" (click)="toggle(d)">
+          <label nz-checkbox [nzDisabled]="!d.downloadable" [ngModel]="selected.has(d.id)"
+            (click)="$event.stopPropagation()" (ngModelChange)="toggle(d)"></label>
+          <div class="doc-icon">{{ kindIcon(d) }}</div>
+          <div class="video-meta">
+            <div class="video-name">{{ d.title || d.link }}</div>
+            <div class="video-path">
+              <span class="doc-type" *ngIf="d.type">{{ d.type }}</span>
+              <span class="doc-level" *ngIf="d.level">{{ d.level }}</span>
+              {{ kindHint(d) }}
+              <span *ngIf="d.date"> · {{ fmtDate(d.date) }}</span>
+            </div>
+          </div>
+          <a class="doc-open" *ngIf="d.link" [href]="d.link" target="_blank" rel="noopener"
+            (click)="$event.stopPropagation()" title="Mở link gốc">↗</a>
+        </div>
+        <div class="empty-row" *ngIf="!visible.length">Không có tài liệu phù hợp.</div>
+      </div>
+
+      <div class="action-row" style="margin-top: 20px">
+        <button nz-button nzType="primary" nzSize="large" class="btn-upload" id="btn-doc-download"
+          [disabled]="!canDownload" [nzLoading]="enqueuing" (click)="download()">
+          ⬇ Tải {{ selected.size }} tài liệu
+        </button>
+        <span class="action-hint" *ngIf="!savePath.trim()">Chưa nhập thư mục lưu</span>
+      </div>
+    </nz-card>
+
+    <!-- ====== HÀNG ĐỢI ====== -->
+    <nz-card class="glass-card" *ngIf="jobs.length">
+      <div class="card-header-row">
+        <span class="card-icon">🧾</span>
+        <span class="card-label">Lượt tải</span>
+        <div class="ml-auto queue-stats">
+          <nz-tag class="badge badge-checking" *ngIf="activeCount">⏳ {{ activeCount }} đang chạy / chờ</nz-tag>
+        </div>
+      </div>
+      <div class="field-hint" style="margin-bottom: 12px">
+        Tải lần lượt từng file. File đã có sẵn trong thư mục sẽ được bỏ qua. Danh sách này mất khi tắt backend.
+      </div>
+
+      <div class="file-queue">
+        <div class="job-block" *ngFor="let j of jobs; let i = index">
+          <div class="file-item"
+            [class.status-pending]="j.status === 'PENDING' || j.status === 'CANCELLED'"
+            [class.status-uploading]="j.status === 'RUNNING'"
+            [class.status-done]="j.status === 'COMPLETED'"
+            [class.status-error]="j.status === 'FAILED'">
+
+            <div class="file-num">{{ jobs.length - i }}</div>
+
+            <div class="file-info">
+              <div class="file-name">
+                {{ j.items.length }} tài liệu
+                <span class="dur">· xong {{ done(j) }}/{{ j.items.length }}
+                  <span *ngIf="failed(j)" class="text-red"> · {{ failed(j) }} lỗi</span>
+                </span>
+              </div>
+              <div class="file-path">→ {{ j.folder }}</div>
+              <div class="file-path" *ngIf="current(j) as c">
+                ⬇ {{ c.title }} · {{ c.progress | number:'1.0-0' }}%
+                <span *ngIf="c.bytes"> · {{ fmtSize(c.bytes) }}<span *ngIf="c.totalBytes > 0"> / {{ fmtSize(c.totalBytes) }}</span></span>
+              </div>
+              <nz-progress *ngIf="j.status === 'RUNNING' || j.status === 'PENDING'"
+                [nzPercent]="jobPercent(j)" nzSize="small"
+                [nzStatus]="j.status === 'RUNNING' ? 'active' : 'normal'"
+                [nzStrokeColor]="{'0%':'#7c3aed','100%':'#3b82f6'}"
+                style="margin-top: 6px">
+              </nz-progress>
+            </div>
+
+            <div class="job-actions">
+              <span class="job-status">{{ statusLabel(j.status) }}</span>
+              <button nz-button nzSize="small" (click)="toggleExpand(j)">{{ expanded.has(j.id) ? 'Ẩn' : 'Chi tiết' }}</button>
+              <button nz-button nzSize="small" nzDanger *ngIf="(j.status === 'PENDING' || j.status === 'RUNNING') && !j.cancelled"
+                (click)="cancel(j)">⛔ Huỷ</button>
+              <button nz-button nzSize="small" nzType="primary" *ngIf="canRetry(j)" (click)="retry(j)">
+                🔄 Tải lại {{ unfinished(j) }} file
+              </button>
+            </div>
+          </div>
+
+          <div class="job-detail" *ngIf="expanded.has(j.id)">
+            <div class="detail-video" *ngFor="let it of j.items">
+              <span class="dv-icon">{{ itemIcon(it.status) }}</span>
+              <span class="dv-title">{{ it.index | number:'2.0-0' }}. {{ it.title }}</span>
+              <span class="dv-pct" *ngIf="it.status === 'DOWNLOADING'">{{ it.progress | number:'1.0-0' }}%</span>
+              <span class="dv-size" *ngIf="it.status === 'DONE' || it.status === 'SKIPPED'">{{ fmtSize(it.bytes) }}</span>
+              <div class="dv-file" *ngIf="it.filePath">{{ it.filePath }}<span *ngIf="it.note"> · {{ it.note }}</span></div>
+              <div class="error-msg" *ngIf="it.status === 'FAILED' && it.error">⚠ {{ it.error }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </nz-card>
+  </div>
+</div>

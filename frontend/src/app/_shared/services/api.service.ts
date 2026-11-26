@@ -74,6 +74,28 @@ export class ApiService {
     return this.http.post<any>(`${this.baseUrl}/api/site/retry/${jobId}`, {});
   }
 
+  // ─── Tải tài liệu (PDF / Slide / Sheet) ──────────────────────
+
+  docsScan(url: string): Observable<DocScan> {
+    return this.http.post<DocScan>(`${this.baseUrl}/api/docs/scan`, { url });
+  }
+
+  docsDownload(payload: { savePath: string; folderName: string; ids: string[]; sheetFormat: 'office' | 'pdf' }): Observable<any> {
+    return this.http.post<any>(`${this.baseUrl}/api/docs/download`, payload);
+  }
+
+  docsJobs(): Observable<DocJob[]> {
+    return this.http.get<DocJob[]>(`${this.baseUrl}/api/docs/jobs`);
+  }
+
+  docsCancel(jobId: string): Observable<any> {
+    return this.http.post(`${this.baseUrl}/api/docs/cancel/${jobId}`, {});
+  }
+
+  docsRetry(jobId: string): Observable<any> {
+    return this.http.post(`${this.baseUrl}/api/docs/retry/${jobId}`, {});
+  }
+
   // ─── YouTube Upload ──────────────────────────────────────────
 
   checkUploadAuthStatus(): Observable<{ credentialsAvailable: boolean; authenticated: boolean }> {
@@ -138,6 +160,48 @@ export interface SiteStatus {
   email?: string;
   targetUrl?: string;
   scan?: { pageUrl: string; level: string; levelName: string; lessons: SiteLesson[] };
+}
+
+export interface DocInfo {
+  id: string;
+  title: string;
+  type: string;
+  level: string;
+  date: string;
+  desc: string;
+  link: string;
+  kind: 'sheet' | 'doc' | 'slide' | 'drive' | 'url' | 'text' | 'none';
+  downloadable: boolean;
+}
+
+export interface DocScan {
+  pageUrl: string;
+  pageTitle: string;
+  docs: DocInfo[];
+}
+
+export interface DocItem {
+  index: number;
+  title: string;
+  type: string;
+  status: 'PENDING' | 'DOWNLOADING' | 'DONE' | 'SKIPPED' | 'FAILED' | 'CANCELLED';
+  progress: number;
+  bytes: number;
+  totalBytes: number;
+  filePath?: string;
+  error?: string;
+  note?: string;
+}
+
+export interface DocJob {
+  id: string;
+  folder: string;
+  sheetFormat: string;
+  items: DocItem[];
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+  cancelled: boolean;
+  createdAt: string;
+  finishedAt?: string;
 }
 
 export interface ConvertItem {

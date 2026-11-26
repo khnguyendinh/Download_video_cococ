@@ -5,10 +5,12 @@ import { UploadComponent } from './upload/upload.component';
 import { OAuthCallbackComponent } from './oauth-callback/oauth-callback.component';
 import { ConvertComponent } from './convert/convert.component';
 import { SiteDownloadComponent } from './site-download/site-download.component';
+import { DocDownloadComponent } from './doc-download/doc-download.component';
 
 const routes: Routes = [
   { path: '',             component: DownloaderComponent },
   { path: 'course',      component: SiteDownloadComponent },
+  { path: 'docs',        component: DocDownloadComponent },
   { path: 'upload',      component: UploadComponent },
   { path: 'convert',     component: ConvertComponent },
   { path: 'oauth-callback', component: OAuthCallbackComponent },

@@ -1,4 +1,5 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Router } from '@angular/router';
 import { NzMessageService } from 'ng-zorro-antd/message';
 import { ApiService, SiteLesson, SiteStatus } from '../../_shared/services/api.service';
 import { DownloadJob } from '../../_shared/models/download-job.model';
@@ -32,7 +33,7 @@ export class SiteDownloadComponent implements OnInit, OnDestroy {
   private statusTimer?: ReturnType<typeof setInterval>;
   private jobsTimer?: ReturnType<typeof setInterval>;
 
-  constructor(private api: ApiService, private message: NzMessageService) {}
+  constructor(private api: ApiService, private message: NzMessageService, private router: Router) {}
 
   ngOnInit(): void {
     this.savePath = this.load(SAVE_PATH_KEY) || '';
@@ -69,6 +70,12 @@ export class SiteDownloadComponent implements OnInit, OnDestroy {
     const url = this.url.trim();
     if (!url) {
       this.message.warning('Dán link trang bài học vào trước nhé');
+      return;
+    }
+    // Link trang tài liệu / Google Drive → chuyển sang tab Tài liệu
+    if (/tai-lieu\.html|drive\.google\.com\/|docs\.google\.com\//i.test(url)) {
+      this.message.info('Đây là link tài liệu → chuyển sang tab Tài liệu');
+      this.router.navigate(['/docs'], { queryParams: { url } });
       return;
     }
     this.save(URL_KEY, url);
